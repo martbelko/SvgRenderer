@@ -9,3 +9,4 @@ endif()
 project("SvgRenderer")
 
 add_subdirectory("SvgRenderer")
+add_subdirectory("modules/glfw")
