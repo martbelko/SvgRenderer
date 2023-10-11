@@ -1,3 +1,5 @@
+#pragma once
+
 typedef struct GLFWwindow GLFWwindow;
 
 namespace SvgRenderer {

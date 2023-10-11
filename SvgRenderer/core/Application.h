@@ -1,3 +1,5 @@
+#pragma once
+
 #include "core/Window.h"
 
 namespace SvgRenderer {
