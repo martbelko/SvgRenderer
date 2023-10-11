@@ -6,6 +6,9 @@
 #include "Renderer/IndexBuffer.h"
 #include "Renderer/VertexArray.h"
 #include "Renderer/Shader.h"
+#include "Renderer/Renderer.h"
+
+#include "Scene/OrthographicCamera.h"
 
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
@@ -18,9 +21,11 @@ namespace SvgRenderer {
 
 	void Application::Init()
 	{
+		uint32_t initWidth = 1280, initHeight = 720;
+
 		m_Window = Window::Create({
-			.width = 1280,
-			.height = 960,
+			.width = initWidth,
+			.height = initHeight,
 			.title = "SvgRenderer",
 			.callbacks = {
 				.onWindowClose = Application::OnWindowCloseStatic,
@@ -31,32 +36,29 @@ namespace SvgRenderer {
 				.onViewportSizeChanged = Application::OnViewportResizeStatic
 			}
 		});
+
+		Renderer::Init(initWidth, initHeight);
 	}
 
 	void Application::Shutdown()
 	{
+		Renderer::Shutdown();
 		m_Window->Close();
 	}
 
 	void Application::Run()
 	{
-		std::filesystem::path shadersPath(Filesystem::AssetsPath() / "shaders");
-		Ref<Shader> shader = Shader::Create(shadersPath / "main.vert", shadersPath / "main.frag");
+		float halfWidth = 1280.0f / 2.0f;
+		float halfHeight = 720.0f / 2.0f;
 
-		const float vertices[] = {
-			-0.5f, -0.5f, 0.0f,
-			 0.5f, -0.5f, 0.0f,
-			 0.0f,  0.5f, 0.0f
+		const glm::vec3 vs[] = {
+			glm::vec3(0.0f, 720.0f, 0.0f),
+			glm::vec3(0.0f, 100.0f, 0.0f),
+			glm::vec3(1280.0f, 100.0f, 0.0f)
 		};
 
-		Ref<VertexArray> vao = VertexArray::Create();
-
-		Ref<VertexBuffer> vbo = VertexBuffer::Create(vertices, sizeof(vertices));
-		vbo->SetLayout({
-			{ ShaderDataType::Float3 }
-		});
-
-		vao->AddVertexBuffer(vbo);
+		OrthographicCamera camera(0, 1280.0f, 0.0f, 720.0f);
+		camera.SetPosition(glm::vec3(0, 0, 0.5f));
 
 		m_Running = true;
 		while (m_Running)
@@ -66,9 +68,11 @@ namespace SvgRenderer {
 			glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
 
-			shader->Bind();
-			vao->Bind();
-			glDrawArrays(GL_TRIANGLES, 0, 3);
+			Renderer::BeginScene(camera);
+
+			Renderer::DrawTriangle(vs[0], vs[1], vs[2]);
+
+			Renderer::EndScene();
 		}
 	}
 

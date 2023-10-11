@@ -2,6 +2,8 @@
 
 #include <glad/glad.h>
 
+#include <glm/gtc/type_ptr.hpp>
+
 namespace SvgRenderer {
 
 	Shader::Shader(const std::filesystem::path& vertexPath, const std::filesystem::path& fragmentPath)
@@ -81,6 +83,46 @@ namespace SvgRenderer {
 		glDeleteShader(fragmentShader);
 
 		return program;
+	}
+
+	void Shader::SetUniformInt(uint32_t uniformLocation, int value)
+	{
+		glUniform1i(uniformLocation, value);
+	}
+
+	void Shader::SetUniformIntArray(uint32_t uniformLocation, int* values, uint32_t count)
+	{
+		glUniform1iv(uniformLocation, count, values);
+	}
+
+	void Shader::SetUniformFloat(uint32_t uniformLocation, float value)
+	{
+		glUniform1f(uniformLocation, value);
+	}
+
+	void Shader::SetUniformFloat2(uint32_t uniformLocation, const glm::vec2& value)
+	{
+		glUniform2f(uniformLocation, value.x, value.y);
+	}
+
+	void Shader::SetUniformFloat3(uint32_t uniformLocation, const glm::vec3& value)
+	{
+		glUniform3f(uniformLocation, value.x, value.y, value.z);
+	}
+
+	void Shader::SetUniformFloat4(uint32_t uniformLocation, const glm::vec4& value)
+	{
+		glUniform4f(uniformLocation, value.x, value.y, value.z, value.w);
+	}
+
+	void Shader::SetUniformMat3(uint32_t uniformLocation, const glm::mat3& matrix)
+	{
+		glUniformMatrix3fv(uniformLocation, 1, GL_FALSE, glm::value_ptr(matrix));
+	}
+
+	void Shader::SetUniformMat4(uint32_t uniformLocation, const glm::mat4& matrix)
+	{
+		glUniformMatrix4fv(uniformLocation, 1, GL_FALSE, glm::value_ptr(matrix));
 	}
 
 }
