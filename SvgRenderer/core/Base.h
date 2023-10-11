@@ -2,15 +2,14 @@
 
 #include <memory>
 
+#define SR_DEBUGBREAK() __debugbreak()
+
 #ifdef _DEBUG
-	#define DEBUGBREAK() __debugbreak()
 	#define ENABLE_ASSERTS
-#else
-	#define DEBUGBREAK()
 #endif
 
-#define EXPAND_MACRO(x) x
-#define STRINGIFY_MACRO(x) #x
+#define SR_EXPAND_MACRO(x) x
+#define SR_STRINGIFY_MACRO(x) #x
 
 #define BIT(x) (1 << x)
 

@@ -116,7 +116,7 @@ namespace SvgRenderer {
 		 * of the format string, effectively removing the token and replacing it
 		 * with the requested item in the final string, then pass it off recursively */
 
-		std::string firstString{ toStdString(first) };
+		std::string firstString{ ToStdString(first) };
 		int index{ 0 };
 		for (const auto& it : smallestValueInformation) {
 			size_t smallestValueLength{ std::get<2>(it) };

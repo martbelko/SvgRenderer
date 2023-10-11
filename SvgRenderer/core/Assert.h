@@ -6,16 +6,16 @@
 #include <filesystem>
 
 #ifdef ENABLE_ASSERTS
-	#define INTERNAL_ASSERT_IMPL(type, check, msg, ...) { if(!(check)) { ##type##ERROR(msg, __VA_ARGS__); DEBUGBREAK(); } }
-	#define INTERNAL_ASSERT_WITH_MSG(type, check, ...) INTERNAL_ASSERT_IMPL(type, check, "Assertion failed: {0}", __VA_ARGS__)
-	#define INTERNAL_ASSERT_NO_MSG(type, check) INTERNAL_ASSERT_IMPL(type, check, "Assertion '{0}' failed at {1}:{2}", STRINGIFY_MACRO(check), std::filesystem::path(__FILE__).filename().string(), __LINE__)
+	#define SR_INTERNAL_ASSERT_IMPL(type, check, msg, ...) { if(!(check)) { ##type##ERROR(msg, __VA_ARGS__); SR_DEBUGBREAK(); } }
+	#define SR_INTERNAL_ASSERT_WITH_MSG(type, check, ...) SR_INTERNAL_ASSERT_IMPL(type, check, "Assertion failed: {0}", __VA_ARGS__)
+	#define SR_INTERNAL_ASSERT_NO_MSG(type, check) SR_INTERNAL_ASSERT_IMPL(type, check, "Assertion '{0}' failed at {1}:{2}", SR_STRINGIFY_MACRO(check), std::filesystem::path(__FILE__).filename().string(), __LINE__)
 
-	#define INTERNAL_ASSERT_GET_MACRO_NAME(arg1, arg2, macro, ...) macro
-	#define INTERNAL_ASSERT_GET_MACRO(...) EXPAND_MACRO( INTERNAL_ASSERT_GET_MACRO_NAME(__VA_ARGS__, INTERNAL_ASSERT_WITH_MSG, INTERNAL_ASSERT_NO_MSG) )
+	#define SR_INTERNAL_ASSERT_GET_MACRO_NAME(arg1, arg2, macro, ...) macro
+	#define SR_INTERNAL_ASSERT_GET_MACRO(...) SR_EXPAND_MACRO( SR_INTERNAL_ASSERT_GET_MACRO_NAME(__VA_ARGS__, SR_INTERNAL_ASSERT_WITH_MSG, SR_INTERNAL_ASSERT_NO_MSG) )
 
-	#define ASSERT(...) EXPAND_MACRO( INTERNAL_ASSERT_GET_MACRO(__VA_ARGS__)(__VA_ARGS__) )
-	#define CORE_ASSERT(...) EXPAND_MACRO( INTERNAL_ASSERT_GET_MACRO(__VA_ARGS__)(CORE_, __VA_ARGS__) )
+	#define SR_ASSERT(...) SR_EXPAND_MACRO( SR_INTERNAL_ASSERT_GET_MACRO(__VA_ARGS__)(SR_, __VA_ARGS__) )
 #else
-	#define ASSERT(...)
-	#define CORE_ASSERT(...)
+	#define SR_ASSERT(...)
 #endif
+
+#define SR_VERIFY(...) SR_EXPAND_MACRO( SR_INTERNAL_ASSERT_GET_MACRO(__VA_ARGS__)(SR_, __VA_ARGS__) )
