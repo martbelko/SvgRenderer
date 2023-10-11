@@ -6,7 +6,7 @@ namespace SvgRenderer {
 
 	void Log::Init()
 	{
-		s_Logger = createRef<Logger>("LOG");
+		s_Logger = CreateRef<Logger>("LOG");
 	}
 
 }
