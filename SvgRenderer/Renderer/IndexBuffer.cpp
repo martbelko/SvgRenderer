@@ -4,7 +4,7 @@
 
 namespace SvgRenderer {
 
-	IndexBuffer::IndexBuffer(uint32_t* indices, uint32_t count)
+	IndexBuffer::IndexBuffer(const uint32_t* indices, uint32_t count)
 		: m_Count(count)
 	{
 		glCreateBuffers(1, &m_RendererId);

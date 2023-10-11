@@ -6,9 +6,7 @@ namespace SvgRenderer {
 
 	void Filesystem::Init()
 	{
-	#ifdef _DEBUG
 		s_AssetsPath = std::filesystem::current_path() / ".." / ".." / ".." / ".." / "assets";
-	#endif
 	}
 
 }

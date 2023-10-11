@@ -61,8 +61,14 @@ namespace SvgRenderer {
 
 			Renderer::BeginScene(camera);
 
-			Renderer::DrawTriangle(glm::vec2(0.0f, 720.0f), glm::vec2(0.0f, 100.0f), glm::vec2(1280.0f, 100.0f));
-			Renderer::DrawLine(glm::vec2(100.0f, 50.0f), glm::vec2(1000.0f, 500.0f));
+			// Renderer::DrawTriangle(glm::vec2(0.0f, 720.0f), glm::vec2(0.0f, 100.0f), glm::vec2(1280.0f, 100.0f));
+			// Renderer::DrawLine(glm::vec2(100.0f, 50.0f), glm::vec2(1000.0f, 500.0f));
+			// Renderer::DrawQuad({ 1000.0f, 500.0f }, { 100.0f, 100.0f });
+
+			Path2DContext* ctx = Renderer::BeginPath(glm::vec2(100, 100), glm::mat4(1.0f));
+			Renderer::LineTo(ctx, glm::vec2(690, 290));
+			Renderer::QuadTo(ctx, glm::vec2(650, 350), glm::vec2(600, 300));
+			Renderer::EndPath(ctx, true);
 
 			Renderer::EndScene();
 		}
