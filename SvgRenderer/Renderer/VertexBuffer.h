@@ -106,8 +106,6 @@ namespace SvgRenderer {
 		VertexBuffer(uint32_t size);
 		~VertexBuffer();
 
-		void Bind() const;
-
 		void SetData(const void* data, uint32_t size);
 
 		const BufferLayout& GetLayout() const { return m_Layout; }

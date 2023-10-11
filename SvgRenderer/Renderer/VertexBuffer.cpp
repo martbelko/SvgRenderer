@@ -23,11 +23,6 @@ namespace SvgRenderer {
 		glDeleteBuffers(1, &m_RendererId);
 	}
 
-	void VertexBuffer::Bind() const
-	{
-		glBindBuffer(GL_ARRAY_BUFFER, m_RendererId);
-	}
-
 	void VertexBuffer::SetData(const void* data, uint32_t size)
 	{
 		glBindBuffer(GL_ARRAY_BUFFER, m_RendererId);
