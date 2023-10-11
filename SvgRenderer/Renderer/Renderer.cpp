@@ -35,16 +35,19 @@ namespace SvgRenderer {
 	{
 	}
 
-	void Renderer::DrawTriangle(const glm::vec3& p1, const glm::vec3& p2, const glm::vec3& p3)
+	void Renderer::DrawTriangle(const glm::vec2& p0, const glm::vec2& p1, const glm::vec2& p2)
 	{
-		const std::array<glm::vec3, 3> vertices = { p1, p2, p3 };
+		const glm::vec4 color = glm::vec4(1.0f, 0.5f, 0.2f, 1.0f);
+		std::array<Vertex2D, 3> vertices({
+			{ p0, color },
+			{ p1, color },
+			{ p2, color }
+		});
 
 		Ref<VertexArray> vao = VertexArray::Create();
 
-		Ref<VertexBuffer> vbo = VertexBuffer::Create(vertices.data(), vertices.size() * sizeof(glm::vec3));
-		vbo->SetLayout({
-			{ ShaderDataType::Float3 }
-		});
+		Ref<VertexBuffer> vbo = VertexBuffer::Create(vertices.data(), static_cast<uint32_t>(vertices.size() * sizeof(Vertex2D)));
+		vbo->SetLayout(Vertex2D::GetBufferLayout());
 
 		vao->AddVertexBuffer(vbo);
 
@@ -54,7 +57,24 @@ namespace SvgRenderer {
 		SR_ASSERT(m_ActiveCamera != nullptr, "Camera was nullptr");
 		s_MainShader->SetUniformMat4(0, m_ActiveCamera->GetViewProjectionMatrix());
 
-		glDrawArrays(GL_TRIANGLES, 0, vertices.size());
+		glDrawArrays(GL_TRIANGLES, 0, static_cast<uint32_t>(vertices.size()));
+	}
+
+	void Renderer::DrawLine(const glm::vec2& start, const glm::vec2& end)
+	{
+		float strokeWidth = 10.0f;
+
+		glm::vec2 direction = end - start;
+		glm::vec2 normalDirection = glm::normalize(direction);
+		glm::vec2 perpVector = glm::vec2(-normalDirection.y, normalDirection.x);
+
+		glm::vec2 bottomLeft = start - (perpVector * strokeWidth * 0.5f);
+		glm::vec2 bottomRight = start + (perpVector * strokeWidth * 0.5f);
+		glm::vec2 topLeft = end + (perpVector * strokeWidth * 0.5f);
+		glm::vec2 topRight = end - (perpVector * strokeWidth * 0.5f);
+
+		DrawTriangle(bottomLeft, bottomRight, topLeft);
+		DrawTriangle(bottomLeft, topLeft, topRight);
 	}
 
 }

@@ -48,15 +48,6 @@ namespace SvgRenderer {
 
 	void Application::Run()
 	{
-		float halfWidth = 1280.0f / 2.0f;
-		float halfHeight = 720.0f / 2.0f;
-
-		const glm::vec3 vs[] = {
-			glm::vec3(0.0f, 720.0f, 0.0f),
-			glm::vec3(0.0f, 100.0f, 0.0f),
-			glm::vec3(1280.0f, 100.0f, 0.0f)
-		};
-
 		OrthographicCamera camera(0, 1280.0f, 0.0f, 720.0f);
 		camera.SetPosition(glm::vec3(0, 0, 0.5f));
 
@@ -70,7 +61,8 @@ namespace SvgRenderer {
 
 			Renderer::BeginScene(camera);
 
-			Renderer::DrawTriangle(vs[0], vs[1], vs[2]);
+			Renderer::DrawTriangle(glm::vec2(0.0f, 720.0f), glm::vec2(0.0f, 100.0f), glm::vec2(1280.0f, 100.0f));
+			Renderer::DrawLine(glm::vec2(100.0f, 50.0f), glm::vec2(1000.0f, 500.0f));
 
 			Renderer::EndScene();
 		}
@@ -99,7 +91,6 @@ namespace SvgRenderer {
 
 	void Application::OnViewportResize(uint32_t width, uint32_t height)
 	{
-		glViewport(0, 0, width, height);
 	}
 
 }
