@@ -37,7 +37,7 @@ namespace SvgRenderer {
 
 		BufferElement() = default;
 
-		BufferElement(ShaderDataType type, const std::string& name, bool normalized = false)
+		BufferElement(ShaderDataType type, bool normalized = false)
 			: type(type), size(ShaderDataTypeSize(type)), offset(0), normalized(normalized)
 		{
 		}
@@ -110,6 +110,8 @@ namespace SvgRenderer {
 
 		const BufferLayout& GetLayout() const { return m_Layout; }
 		void SetLayout(const BufferLayout& layout) { m_Layout = layout; }
+
+		uint32_t GetRendererId() const { return m_RendererId; }
 	public:
 		static Ref<VertexBuffer> Create(uint32_t size)
 		{

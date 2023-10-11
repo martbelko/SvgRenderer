@@ -9,6 +9,8 @@ namespace SvgRenderer {
 		~IndexBuffer();
 
 		uint32_t GetCount() const { return m_Count; }
+
+		uint32_t GetRendererId() const { return m_RendererId; }
 	public:
 		static Ref<IndexBuffer> Create(uint32_t* indices, uint32_t count)
 		{
