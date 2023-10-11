@@ -2,7 +2,7 @@
 
 namespace SvgRenderer {
 
-	ref<Logger> Log::s_Logger;
+	Ref<Logger> Log::s_Logger;
 
 	void Log::Init()
 	{

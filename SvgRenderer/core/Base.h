@@ -16,17 +16,17 @@
 namespace SvgRenderer {
 
 	template<typename T>
-	using scope = std::unique_ptr<T>;
+	using Scope = std::unique_ptr<T>;
 	template<typename T, typename ... Args>
-	constexpr scope<T> CreateScope(Args&& ... args)
+	constexpr Scope<T> CreateScope(Args&& ... args)
 	{
 		return std::make_unique<T>(std::forward<Args>(args)...);
 	}
 
 	template<typename T>
-	using ref = std::shared_ptr<T>;
+	using Ref = std::shared_ptr<T>;
 	template<typename T, typename ... Args>
-	constexpr ref<T> CreateRef(Args&& ... args)
+	constexpr Ref<T> CreateRef(Args&& ... args)
 	{
 		return std::make_shared<T>(std::forward<Args>(args)...);
 	}

@@ -14,3 +14,5 @@ endif()
 target_link_libraries(${PROJECT_NAME} PUBLIC GLFW_MODULE GLAD_MODULE)
 
 add_compile_definitions(GLFW_INCLUDE_NONE)
+
+include_directories(./)

@@ -10,9 +10,9 @@ namespace SvgRenderer {
 	public:
 		static void Init();
 
-		static ref<Logger>& GetLogger() { return s_Logger; }
+		static Ref<Logger>& GetLogger() { return s_Logger; }
 	private:
-		static ref<Logger> s_Logger;
+		static Ref<Logger> s_Logger;
 	};
 
 }
