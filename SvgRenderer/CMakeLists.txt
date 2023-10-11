@@ -1,6 +1,9 @@
 ﻿project("SvgRenderer" CXX)
 
-add_executable(${PROJECT_NAME} "SvgRenderer.cpp" "SvgRenderer.h")
+file(GLOB_RECURSE project_headers ${CMAKE_CURRENT_LIST_DIR}/*.h)
+file(GLOB_RECURSE project_sources ${CMAKE_CURRENT_LIST_DIR}/*.cpp)
+
+add_executable(${PROJECT_NAME} ${project_headers} ${project_sources})
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 20)
