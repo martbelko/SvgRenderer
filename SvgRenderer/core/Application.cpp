@@ -10,6 +10,8 @@
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
 
+#include <glm/glm.hpp>
+
 namespace SvgRenderer {
 
 	Application Application::s_Instance;
@@ -41,7 +43,7 @@ namespace SvgRenderer {
 		std::filesystem::path shadersPath(Filesystem::AssetsPath() / "shaders");
 		Ref<Shader> shader = Shader::Create(shadersPath / "main.vert", shadersPath / "main.frag");
 
-		float vertices[] = {
+		const float vertices[] = {
 			-0.5f, -0.5f, 0.0f,
 			 0.5f, -0.5f, 0.0f,
 			 0.0f,  0.5f, 0.0f

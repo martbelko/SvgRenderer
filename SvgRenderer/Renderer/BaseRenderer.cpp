@@ -1,4 +1,4 @@
-#include "Renderer.h"
+#include "BaseRenderer.h"
 
 namespace SvgRenderer {
 }
