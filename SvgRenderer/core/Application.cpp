@@ -10,12 +10,24 @@ namespace SvgRenderer {
 
 	void Application::Init()
 	{
-		m_Window = CreateScope<Window>();
+		m_Window = Window::Create({
+			.width = 1280,
+			.height = 960,
+			.title = "SvgRenderer",
+			.callbacks = {
+				.onWindowClose = Application::OnWindowCloseStatic,
+				.onKeyPressed = Application::OnKeyPressedStatic,
+				.onKeyReleased = Application::OnKeyReleasedStatic,
+				.onMousePressed = Application::OnMousePressedStatic,
+				.onMouseReleased = Application::OnMouseReleasedStatic,
+				.onViewportSizeChanged = Application::OnViewportResizeStatic
+			}
+		});
 	}
 
 	void Application::Shutdown()
 	{
-
+		m_Window->Close();
 	}
 
 	void Application::Run()
@@ -32,32 +44,28 @@ namespace SvgRenderer {
 
 	void Application::OnWindowClose()
 	{
-
+		m_Running = false;
 	}
 
 	void Application::OnKeyPressed(int key, int repeat)
 	{
-
 	}
 
 	void Application::OnKeyReleased(int key)
 	{
-
 	}
 
 	void Application::OnMousePressed(int key, int repeat)
 	{
-
 	}
 
 	void Application::OnMouseReleased(int key)
 	{
-
 	}
 
 	void Application::OnViewportResize(uint32_t width, uint32_t height)
 	{
-
+		glViewport(0, 0, width, height);
 	}
 
 }

@@ -6,7 +6,7 @@
 #include <filesystem>
 
 #ifdef ENABLE_ASSERTS
-	#define SR_INTERNAL_ASSERT_IMPL(type, check, msg, ...) { if(!(check)) { ##type##ERROR(msg, __VA_ARGS__); SR_DEBUGBREAK(); } }
+	#define SR_INTERNAL_ASSERT_IMPL(type, check, msg, ...) { if(!(check)) { ##type##CRITICAL(msg, __VA_ARGS__); SR_DEBUGBREAK(); } }
 	#define SR_INTERNAL_ASSERT_WITH_MSG(type, check, ...) SR_INTERNAL_ASSERT_IMPL(type, check, "Assertion failed: {0}", __VA_ARGS__)
 	#define SR_INTERNAL_ASSERT_NO_MSG(type, check) SR_INTERNAL_ASSERT_IMPL(type, check, "Assertion '{0}' failed at {1}:{2}", SR_STRINGIFY_MACRO(check), std::filesystem::path(__FILE__).filename().string(), __LINE__)
 

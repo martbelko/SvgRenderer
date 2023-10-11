@@ -22,6 +22,8 @@ namespace SvgRenderer {
 
 		static void OnViewportResizeStatic(uint32_t width, uint32_t height) { Get().OnViewportResize(width, height); }
 	private:
+		Application() = default;
+
 		void OnWindowClose();
 
 		void OnKeyPressed(int key, int repeat);
