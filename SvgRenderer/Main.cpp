@@ -26,8 +26,8 @@ const unsigned int SCR_HEIGHT = 600;
 // CODE TAKEN FROM LEARNOPENGL
 int main(int argc, char** argv)
 {
-	Log::Init();
-	INFO("Initialized Log");
+	SvgRenderer::Log::Init();
+	SR_INFO("Initialized Log");
 
 	// glfw: initialize and configure
 	// ------------------------------
@@ -41,7 +41,7 @@ int main(int argc, char** argv)
 	GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "LearnOpenGL", NULL, NULL);
 	if (window == NULL)
 	{
-		CRITICAL("Failed to create GLFW window");
+		SR_CRITICAL("Failed to create GLFW window");
 		glfwTerminate();
 		return -1;
 	}

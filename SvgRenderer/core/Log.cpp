@@ -1,9 +1,12 @@
 #include "Log.h"
 
-ref<Logger> Log::s_Logger;
+namespace SvgRenderer {
 
-void Log::Init()
-{
-	s_Logger = createRef<Logger>("LOG");
+	ref<Logger> Log::s_Logger;
+
+	void Log::Init()
+	{
+		s_Logger = createRef<Logger>("LOG");
+	}
+
 }
-
