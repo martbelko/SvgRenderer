@@ -6,6 +6,7 @@
 #include "Renderer/IndexBuffer.h"
 #include "Renderer/VertexArray.h"
 #include "Renderer/Shader.h"
+#include "Renderer/Framebuffer.h"
 #include "Renderer/Renderer.h"
 
 #include "Scene/OrthographicCamera.h"
@@ -51,11 +52,21 @@ namespace SvgRenderer {
 		OrthographicCamera camera(0, 1280.0f, 0.0f, 720.0f);
 		camera.SetPosition(glm::vec3(0, 0, 0.5f));
 
+		FramebufferDesc fbDesc;
+		fbDesc.width = 1280;
+		fbDesc.height = 720;
+		fbDesc.attachments = {
+			{ FramebufferTextureFormat::RGBA8 }
+		};
+
+		Ref<Framebuffer> fbo = Framebuffer::Create(fbDesc);
+
 		m_Running = true;
 		while (m_Running)
 		{
 			m_Window->OnUpdate();
 
+			fbo->Bind();
 			glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
 			glClear(GL_COLOR_BUFFER_BIT);
 
@@ -67,10 +78,14 @@ namespace SvgRenderer {
 
 			Path2DContext* ctx = Renderer::BeginPath(glm::vec2(100, 100), glm::mat4(1.0f));
 			Renderer::LineTo(ctx, glm::vec2(690, 290));
-			Renderer::QuadTo(ctx, glm::vec2(650, 350), glm::vec2(600, 300));
+			Renderer::QuadTo(ctx, glm::vec2(600, 400), glm::vec2(500, 300));
 			Renderer::EndPath(ctx, true);
 
+			delete ctx;
+
 			Renderer::EndScene();
+
+			Renderer::RenderFramebuffer(fbo);
 		}
 	}
 

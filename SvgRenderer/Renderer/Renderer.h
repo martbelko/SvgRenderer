@@ -2,6 +2,7 @@
 
 #include "Renderer/VertexBuffer.h"
 #include "Renderer/Shader.h"
+#include "Renderer/Framebuffer.h"
 
 #include "Scene/OrthographicCamera.h"
 
@@ -23,13 +24,20 @@ namespace SvgRenderer {
 		}
 	};
 
-	enum class BinaryPathCommandType : uint8_t
+	struct Vertex3D
 	{
-		MoveTo = 0,
-		LineTo,
-		CurveTo,
-		QuadTo,
-		Length
+		glm::vec3 position;
+		glm::vec3 normal;
+		glm::vec4 color;
+
+		static BufferLayout GetBufferLayout()
+		{
+			return BufferLayout({
+				{ ShaderDataType::Float3 },
+				{ ShaderDataType::Float3 },
+				{ ShaderDataType::Float4 }
+				});
+		}
 	};
 
 	enum class CurveType : uint8_t
@@ -103,6 +111,11 @@ namespace SvgRenderer {
 		float approximateLength;
 	};
 
+	struct RendererStats
+	{
+		uint32_t drawCalls;
+	};
+
 	class Renderer
 	{
 	public:
@@ -112,7 +125,11 @@ namespace SvgRenderer {
 		static void BeginScene(const OrthographicCamera& camera);
 		static void EndScene();
 
+		static void RenderFramebuffer(const Ref<Framebuffer>& fbo);
+
 		static void DrawTriangle(const glm::vec2& p0, const glm::vec2& p1, const glm::vec2& p2);
+		static void DrawTriangle3D(const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2);
+
 		static void DrawLine(const glm::vec2& from, const glm::vec2& to);
 		static void DrawQuad(const glm::vec2& start, const glm::vec2& size);
 
@@ -121,12 +138,22 @@ namespace SvgRenderer {
 
 		static void LineTo(Path2DContext* path, const glm::vec2& point);
 		static void QuadTo(Path2DContext* path, const glm::vec2& p1, const glm::vec2& p2);
+
+		static const OrthographicCamera* GetCurrentCamera3D() { return m_ActiveCamera; }
 	private:
 		static void LineToInternal(Path2DContext* path, const glm::vec2& point, bool addRawCurve);
 		static void LineToInternal(Path2DContext* path, const Path_Vertex2DLine& vert, bool addRawCurve);
 	private:
 		static Ref<Shader> s_MainShader;
+		static Ref<Shader> s_MainShader3D;
+		static Ref<Shader> s_DisplayFboShader;
+
 		static const OrthographicCamera* m_ActiveCamera;
+
+		static std::vector<Vertex2D> s_Vertices;
+		static std::vector<Vertex3D> s_Vertices3D;
+
+		static RendererStats s_Stats;
 	};
 
 }

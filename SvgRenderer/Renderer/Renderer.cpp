@@ -162,12 +162,20 @@ namespace SvgRenderer {
 	}
 
 	Ref<Shader> Renderer::s_MainShader;
+	Ref<Shader> Renderer::s_MainShader3D;
+	Ref<Shader> Renderer::s_DisplayFboShader;
+
 	const OrthographicCamera* Renderer::m_ActiveCamera = nullptr;
+	std::vector<Vertex2D> Renderer::s_Vertices;
+	std::vector<Vertex3D> Renderer::s_Vertices3D;
+	RendererStats Renderer::s_Stats;
 
 	void Renderer::Init(uint32_t initWidth, uint32_t initHeight)
 	{
 		std::filesystem::path shadersPath(Filesystem::AssetsPath() / "shaders");
 		s_MainShader = Shader::Create(shadersPath / "main.vert", shadersPath / "main.frag");
+		s_MainShader3D = Shader::Create(shadersPath / "main3D.vert", shadersPath / "main3D.frag");
+		s_DisplayFboShader = Shader::Create(shadersPath / "DisplayFbo.vert", shadersPath / "DisplayFbo.frag");
 
 		glViewport(0, 0, initWidth, initHeight);
 	}
@@ -180,35 +188,76 @@ namespace SvgRenderer {
 	void Renderer::BeginScene(const OrthographicCamera& camera)
 	{
 		m_ActiveCamera = &camera;
+		s_Vertices.clear();
+		s_Stats.drawCalls = 0;
 	}
 
 	void Renderer::EndScene()
 	{
+		{
+			Ref<VertexArray> vao = VertexArray::Create();
+
+			Ref<VertexBuffer> vbo = VertexBuffer::Create(s_Vertices.data(), static_cast<uint32_t>(s_Vertices.size() * sizeof(Vertex2D)));
+			vbo->SetLayout(Vertex2D::GetBufferLayout());
+
+			vao->AddVertexBuffer(vbo);
+
+			vao->Bind();
+			s_MainShader->Bind();
+
+			SR_ASSERT(m_ActiveCamera != nullptr, "Camera was nullptr");
+			s_MainShader->SetUniformMat4(0, m_ActiveCamera->GetViewProjectionMatrix());
+
+			glDrawArrays(GL_TRIANGLES, 0, static_cast<uint32_t>(s_Vertices.size()));
+			++s_Stats.drawCalls;
+		}
+
+		{
+			Ref<VertexArray> vao = VertexArray::Create();
+
+			Ref<VertexBuffer> vbo = VertexBuffer::Create(s_Vertices3D.data(), static_cast<uint32_t>(s_Vertices3D.size() * sizeof(Vertex3D)));
+			vbo->SetLayout(Vertex3D::GetBufferLayout());
+
+			vao->AddVertexBuffer(vbo);
+
+			vao->Bind();
+			s_MainShader->Bind();
+
+			SR_ASSERT(m_ActiveCamera != nullptr, "Camera was nullptr");
+			s_MainShader->SetUniformMat4(0, m_ActiveCamera->GetViewProjectionMatrix());
+
+			glDrawArrays(GL_TRIANGLES, 0, static_cast<uint32_t>(s_Vertices3D.size()));
+			++s_Stats.drawCalls;
+		}
+	}
+
+	void Renderer::RenderFramebuffer(const Ref<Framebuffer>& fbo)
+	{
+		Ref<VertexArray> emptyVao = VertexArray::Create();
+
+		Framebuffer::BindDefaultFramebuffer();
+		emptyVao->Bind();
+		s_DisplayFboShader->Bind();
+		glBindTextureUnit(0, fbo->GetColorAttachmentRendererID());
+		glDrawArrays(GL_TRIANGLES, 0, 3);
 	}
 
 	void Renderer::DrawTriangle(const glm::vec2& p0, const glm::vec2& p1, const glm::vec2& p2)
 	{
 		const glm::vec4 color = glm::vec4(1.0f, 0.5f, 0.2f, 1.0f);
-		std::array<Vertex2D, 3> vertices({
-			{ p0, color },
-			{ p1, color },
-			{ p2, color }
-		});
 
-		Ref<VertexArray> vao = VertexArray::Create();
+		s_Vertices.push_back({ p0, color });
+		s_Vertices.push_back({ p1, color });
+		s_Vertices.push_back({ p2, color });
+	}
 
-		Ref<VertexBuffer> vbo = VertexBuffer::Create(vertices.data(), static_cast<uint32_t>(vertices.size() * sizeof(Vertex2D)));
-		vbo->SetLayout(Vertex2D::GetBufferLayout());
+	void Renderer::DrawTriangle3D(const glm::vec3& p0, const glm::vec3& p1, const glm::vec3& p2)
+	{
+		const glm::vec4 color = glm::vec4(1.0f, 0.5f, 0.2f, 1.0f);
 
-		vao->AddVertexBuffer(vbo);
-
-		vao->Bind();
-		s_MainShader->Bind();
-
-		SR_ASSERT(m_ActiveCamera != nullptr, "Camera was nullptr");
-		s_MainShader->SetUniformMat4(0, m_ActiveCamera->GetViewProjectionMatrix());
-
-		glDrawArrays(GL_TRIANGLES, 0, static_cast<uint32_t>(vertices.size()));
+		s_Vertices3D.push_back({ p0, color });
+		s_Vertices3D.push_back({ p1, color });
+		s_Vertices3D.push_back({ p2, color });
 	}
 
 	void Renderer::DrawLine(const glm::vec2& start, const glm::vec2& end)
@@ -461,11 +510,11 @@ namespace SvgRenderer {
 			const Path_Vertex2DLine& nextVertex = path->data[(vertIndex + 1) % path->data.size()];
 			const glm::vec4& nextColor = nextVertex.color;
 
-			DrawTriangle(
+			DrawTriangle3D(
 				transformVertVec3(vertex.frontP1, path->transform),
 				transformVertVec3(vertex.frontP2, path->transform),
 				transformVertVec3(nextVertex.backP1, path->transform));
-			DrawTriangle(
+			DrawTriangle3D(
 				transformVertVec3(vertex.frontP2, path->transform),
 				transformVertVec3(nextVertex.backP2, path->transform),
 				transformVertVec3(nextVertex.backP1, path->transform));
