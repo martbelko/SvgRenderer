@@ -2,7 +2,12 @@
 
 #include "core/Window.h"
 
+#include <glm/glm.hpp>
+
 namespace SvgRenderer {
+
+	struct CurvedPolygon;
+	class Shader;
 
 	class Application
 	{
@@ -23,6 +28,9 @@ namespace SvgRenderer {
 		static void OnMouseReleasedStatic(int button) { Get().OnMouseReleased(button); }
 
 		static void OnViewportResizeStatic(uint32_t width, uint32_t height) { Get().OnViewportResize(width, height); }
+	private:
+		void DrawVertices(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref);
+		void DrawVerticesBezier(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref);
 	private:
 		Application() = default;
 

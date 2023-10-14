@@ -8,7 +8,9 @@ namespace SvgRenderer {
 
 		// Color
 		RGBA8,
+		RGBA32F,
 		RED_INTEGER,
+		FLOAT,
 
 		// Depth/stencil
 		DEPTH24STENCIL8,
@@ -59,6 +61,8 @@ namespace SvgRenderer {
 		void ClearAttachment(uint32_t attachmentIndex, int value);
 
 		uint32_t GetColorAttachmentRendererID(uint32_t index = 0) const { return m_ColorAttachments[index]; }
+		uint32_t GetDepthStencilAttachment() const { return m_DepthAttachment; }
+		uint32_t GetRendererId() const { return m_RendererID; }
 
 		const FramebufferDesc& GetSpecification() const { return m_Desc; }
 	public:

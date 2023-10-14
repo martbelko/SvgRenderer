@@ -80,7 +80,9 @@ namespace SvgRenderer {
 			switch (format)
 			{
 				case FramebufferTextureFormat::RGBA8:       return GL_RGBA8;
+				case FramebufferTextureFormat::RGBA32F:       return GL_RGBA32F;
 				case FramebufferTextureFormat::RED_INTEGER: return GL_RED_INTEGER;
+				case FramebufferTextureFormat::FLOAT:       return GL_RED;
 			}
 
 			SR_ASSERT(false);
@@ -141,8 +143,14 @@ namespace SvgRenderer {
 				case FramebufferTextureFormat::RGBA8:
 					Utils::AttachColorTexture(m_ColorAttachments[i], m_Desc.samples, GL_RGBA8, GL_RGBA, m_Desc.width, m_Desc.height, i);
 					break;
+				case FramebufferTextureFormat::RGBA32F:
+					Utils::AttachColorTexture(m_ColorAttachments[i], m_Desc.samples, GL_RGBA32F, GL_RGBA, m_Desc.width, m_Desc.height, i);
+					break;
 				case FramebufferTextureFormat::RED_INTEGER:
 					Utils::AttachColorTexture(m_ColorAttachments[i], m_Desc.samples, GL_R32I, GL_RED_INTEGER, m_Desc.width, m_Desc.height, i);
+					break;
+				case FramebufferTextureFormat::FLOAT:
+					Utils::AttachColorTexture(m_ColorAttachments[i], m_Desc.samples, GL_R32F, GL_RED, m_Desc.width, m_Desc.height, i);
 					break;
 				}
 			}
@@ -218,9 +226,9 @@ namespace SvgRenderer {
 	{
 		SR_ASSERT(attachmentIndex < m_ColorAttachments.size());
 
+		float vv = 0;
 		auto& spec = m_ColorAttachmentDescs[attachmentIndex];
-		glClearTexImage(m_ColorAttachments[attachmentIndex], 0,
-			Utils::FBTextureFormatToGL(spec.textureFormat), GL_INT, &value);
+		glClearTexImage(m_ColorAttachments[attachmentIndex], 0, GL_RED, GL_FLOAT, &vv);
 	}
 
 }

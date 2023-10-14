@@ -235,7 +235,7 @@ namespace SvgRenderer {
 	{
 		Ref<VertexArray> emptyVao = VertexArray::Create();
 
-		Framebuffer::BindDefaultFramebuffer();
+		//Framebuffer::BindDefaultFramebuffer();
 		emptyVao->Bind();
 		s_DisplayFboShader->Bind();
 		glBindTextureUnit(0, fbo->GetColorAttachmentRendererID());
@@ -365,9 +365,7 @@ namespace SvgRenderer {
 
 		if (path->data.size() <= 1)
 		{
-#ifdef _DEBUG
 			SR_WARN("Corrupted path data found");
-#endif
 			return false;
 		}
 
