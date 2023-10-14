@@ -31,6 +31,7 @@ namespace SvgRenderer {
 	private:
 		void DrawVertices(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref);
 		void DrawVerticesBezier(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref);
+		void DrawPolygon(const CurvedPolygon& polygon);
 	private:
 		Application() = default;
 

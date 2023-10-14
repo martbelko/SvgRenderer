@@ -93,31 +93,10 @@ namespace SvgRenderer {
 			}
 		}
 
-		Ref<VertexBuffer> vbo = VertexBuffer::Create(vertices.data(), vertices.size() * sizeof(glm::vec2));
-		vbo->SetLayout({
-			{ ShaderDataType::Float2 },
-			{ ShaderDataType::Float2 }
-			});
-
-		Ref<VertexArray> vao = VertexArray::Create();
-		vao->AddVertexBuffer(vbo);
-
-		vao->Bind();
-		shader->Bind();
-		shader->SetUniformMat4(0, camera.GetViewProjectionMatrix());
-
-		//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 2);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	}
-
-	void Application::DrawVerticesBezier(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref)
-	{
-		std::vector<glm::vec2> vertices;
 		for (const QuadBez& bez : polygon.bezs)
 		{
-			glm::vec2 p0 = bez.p0;
-			glm::vec2 p1 = bez.p1;
+			glm::vec2 p0 = centroid;
+			glm::vec2 p1 = bez.p0;
 			glm::vec2 p2 = bez.p2;
 
 			float s = p0.x * p1.y + p1.x * p2.y + p2.x * p0.y - p1.x * p0.y - p0.x * p2.y - p2.x * p1.y;
@@ -157,6 +136,86 @@ namespace SvgRenderer {
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 	}
 
+	void Application::DrawVerticesBezier(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref)
+	{
+		std::vector<glm::vec2> vertices;
+		for (const QuadBez& bez : polygon.bezs)
+		{
+			glm::vec2 p0 = bez.p0;
+			glm::vec2 p1 = bez.p1;
+			glm::vec2 p2 = bez.p2;
+
+			float s = p0.x * p1.y + p1.x * p2.y + p2.x * p0.y - p1.x * p0.y - p0.x * p2.y - p2.x * p1.y;
+			if (s > 0.0f)
+				s = 1.0f;
+			else if (s < 0.0f)
+				s = -1.0f;
+			else
+				s = 0.0f;
+
+			vertices.push_back(p0);
+			vertices.push_back({ s, s });
+			vertices.push_back(p1);
+			vertices.push_back({ s, s });
+			vertices.push_back(p2);
+			vertices.push_back({ s, s });
+		}
+
+		Ref<VertexBuffer> vbo = VertexBuffer::Create(vertices.data(), vertices.size() * sizeof(glm::vec2));
+		vbo->SetLayout({
+			{ ShaderDataType::Float2 },
+			{ ShaderDataType::Float2 }
+			});
+
+		Ref<VertexArray> vao = VertexArray::Create();
+		vao->AddVertexBuffer(vbo);
+
+		vao->Bind();
+		shader->Bind();
+		shader->SetUniformMat4(0, camera.GetViewProjectionMatrix());
+
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 2);
+	}
+
+	Ref<Shader> triangleShader;
+	Ref<Shader> triangle2Shader;
+	Ref<Shader> bezierShader;
+	Ref<Shader> bezier2Shader;
+
+	void Application::DrawPolygon(const CurvedPolygon& polygon)
+	{
+		glm::vec2 centroid = glm::vec2(0, 0);
+		for (const LineBez& l : polygon.lines)
+		{
+			centroid += l.p0;
+			centroid += l.p1;
+		}
+
+		for (const QuadBez& q : polygon.bezs)
+		{
+			centroid += q.p0;
+			centroid += q.p1;
+			centroid += q.p2;
+		}
+		centroid /= polygon.lines.size() * 2 + polygon.bezs.size() * 3;
+		centroid = { 0, 0 };
+
+		glStencilMask(0xFF);
+		glStencilFunc(GL_ALWAYS, 1, 0xFF);
+		glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+		DrawVertices(polygon, centroid, triangleShader, 1.0f);
+		DrawVerticesBezier(polygon, centroid, bezierShader, -1.0f);
+
+		glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
+		DrawVertices(polygon, centroid, triangle2Shader, -1.0f);
+		DrawVerticesBezier(polygon, centroid, bezier2Shader, 1.0f);
+
+		glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+		DrawVertices(polygon, centroid, triangleShader, 0.0f);
+		DrawVerticesBezier(polygon, centroid, bezierShader, 0.0f);
+	}
+
 	void Application::Run()
 	{
 		camera.SetPosition(glm::vec3(0, 0, 0.5f));
@@ -171,48 +230,47 @@ namespace SvgRenderer {
 
 		Ref<Framebuffer> fbo = Framebuffer::Create(fbDesc);
 
-		Ref<Shader> triangleShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "tri.vert", Filesystem::AssetsPath() / "shaders" / "tri.frag");
-		Ref<Shader> triangle2Shader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "tri.vert", Filesystem::AssetsPath() / "shaders" / "tri2.frag");
-		Ref<Shader> bezierShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "bez.vert", Filesystem::AssetsPath() / "shaders" / "bez.frag");
-		Ref<Shader> bezier2Shader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "bez.vert", Filesystem::AssetsPath() / "shaders" / "bez2.frag");
+		triangleShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "tri.vert", Filesystem::AssetsPath() / "shaders" / "tri.frag");
+		triangle2Shader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "tri.vert", Filesystem::AssetsPath() / "shaders" / "tri2.frag");
+		bezierShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "bez.vert", Filesystem::AssetsPath() / "shaders" / "bez.frag");
+		bezier2Shader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "bez.vert", Filesystem::AssetsPath() / "shaders" / "bez2.frag");
 
 		CurvedPolygon polygon;
 		polygon.lines.push_back(LineBez{ .p0 = { 100, 100 }, .p1 = { 690, 290 } });
-		polygon.lines.push_back(LineBez{ .p0 = { 690, 290 }, .p1 = { 500, 300 } });
-		polygon.lines.push_back(LineBez{ .p0 = { 500, 300 }, .p1 = { 100, 100 } });
-
-		polygon.lines.push_back(LineBez{ .p0 = { 690, 290 }, .p1 = { 600, 600 } });
-		polygon.lines.push_back(LineBez{ .p0 = { 600, 600 }, .p1 = { 500, 300 } });
 
 		polygon.bezs.push_back(QuadBez{ .p0 = { 690, 290 }, .p1 = { 600, 600 }, .p2 = { 500, 300 } });
 
-		glm::vec2 centroid = glm::vec2(100, 100) + glm::vec2(690, 290) + glm::vec2(500, 300) + glm::vec2(600, 600);
-		centroid /= 4;
+		// polygon.lines.push_back(LineBez{ .p0 = { 690, 290 }, .p1 = { 600, 600 } });
+		// polygon.lines.push_back(LineBez{ .p0 = { 600, 600 }, .p1 = { 500, 300 } });
+		// polygon.lines.push_back(LineBez{ .p0 = { 690, 290 }, .p1 = { 500, 300 } });
+
+		polygon.lines.push_back(LineBez{ .p0 = { 500, 300 }, .p1 = { 100, 100 } });
+
+		auto PreprocessPolygon = [](CurvedPolygon& p)
+			{
+				// for (const QuadBez& bez : p.bezs)
+				// {
+				// 	p.lines.push_back(LineBez{ .p0 = bez.p0, .p1 = bez.p1 });
+				// 	p.lines.push_back(LineBez{ .p0 = bez.p1, .p1 = bez.p2 });
+				// 	p.lines.push_back(LineBez{ .p0 = bez.p0, .p1 = bez.p2 });
+				// }
+			};
+
+		PreprocessPolygon(polygon);
+
+		// M 650 300 Q 625 150 600 300 Z
+		CurvedPolygon p;
+		//p.bezs.push_back(QuadBez{ .p0 = { 650, 300 }, .p1 = { 625, 150 }, .p2 = { 600, 300 } });
+		//p.lines.push_back(LineBez{ .p0 = { 600, 300 }, .p1 = { 650, 300 } });
+		p.bezs.push_back(QuadBez{ .p0 = { 690, 290 }, .p1 = { 600, 600 }, .p2 = { 500, 300 } });
+		p.lines.push_back(LineBez{ .p0 = { 500, 300 }, .p1 = { 690, 290 } });
+		PreprocessPolygon(p);
 
 		m_Running = true;
 		glDisable(GL_DEPTH_TEST);
 		while (m_Running)
 		{
-			glEnable(GL_STENCIL_TEST);
-
 			fbo->Bind();
-			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-			glClearStencil(0);
-			glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-			glStencilMask(0xFF);
-			glStencilFunc(GL_ALWAYS, 1, 0xFF);
-			glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
-			DrawVertices(polygon, centroid, triangleShader, 1.0f);
-			DrawVerticesBezier(polygon, centroid, bezierShader, 1.0f);
-
-			glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
-			DrawVertices(polygon, centroid, triangle2Shader, -1.0f);
-			DrawVerticesBezier(polygon, centroid, bezier2Shader, 1.0f);
-
-			glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-			DrawVertices(polygon, centroid, triangleShader, 0.0f);
-			DrawVerticesBezier(polygon, centroid, bezierShader, 0.0f);
 
 			// Renderer::BeginScene(camera);
 			//
@@ -223,6 +281,14 @@ namespace SvgRenderer {
 			// delete ctx;
 			//
 			// Renderer::EndScene();
+
+			glEnable(GL_STENCIL_TEST);
+			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+			glClearStencil(0);
+			glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+			//DrawPolygon(polygon);
+			DrawPolygon(p);
 
 			glBlitNamedFramebuffer(fbo->GetRendererId(), 0,
 				0, 0, 1280, 720,
@@ -236,17 +302,17 @@ namespace SvgRenderer {
 			glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
 			Renderer::RenderFramebuffer(fbo);
 
-			glDisable(GL_STENCIL_TEST);
-
-			Renderer::BeginScene(camera);
-
-			Path2DContext* ctx = Renderer::BeginPath(glm::vec2(100, 100), glm::mat4(1.0f));
-			Renderer::LineTo(ctx, glm::vec2(690, 290));
-			Renderer::QuadTo(ctx, glm::vec2(600, 600), glm::vec2(500, 300));
-			Renderer::EndPath(ctx, true);
-			delete ctx;
-
-			Renderer::EndScene();
+			// glDisable(GL_STENCIL_TEST);
+			//
+			// Renderer::BeginScene(camera);
+			//
+			// Path2DContext* ctx = Renderer::BeginPath(glm::vec2(100, 100), glm::mat4(1.0f));
+			// Renderer::LineTo(ctx, glm::vec2(690, 290));
+			// Renderer::QuadTo(ctx, glm::vec2(600, 600), glm::vec2(500, 300));
+			// Renderer::EndPath(ctx, true);
+			// delete ctx;
+			//
+			// Renderer::EndScene();
 
 			m_Window->OnUpdate();
 		}
