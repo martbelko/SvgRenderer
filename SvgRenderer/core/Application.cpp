@@ -82,67 +82,18 @@ namespace SvgRenderer {
 			else
 				s = 0.0f;
 
-			if (s == ref)
-			{
-				vertices.push_back(centroid);
-				vertices.push_back({ s, s });
-				vertices.push_back(line.p0);
-				vertices.push_back({ s, s });
-				vertices.push_back(line.p1);
-				vertices.push_back({ s, s });
-			}
+			vertices.push_back(centroid);
+			vertices.push_back({ s, s });
+			vertices.push_back(line.p0);
+			vertices.push_back({ s, s });
+			vertices.push_back(line.p1);
+			vertices.push_back({ s, s });
 		}
 
 		for (const QuadBez& bez : polygon.bezs)
 		{
 			glm::vec2 p0 = centroid;
 			glm::vec2 p1 = bez.p0;
-			glm::vec2 p2 = bez.p2;
-
-			float s = p0.x * p1.y + p1.x * p2.y + p2.x * p0.y - p1.x * p0.y - p0.x * p2.y - p2.x * p1.y;
-			if (s > 0.0f)
-				s = 1.0f;
-			else if (s < 0.0f)
-				s = -1.0f;
-			else
-				s = 0.0f;
-
-			if (s == ref)
-			{
-				vertices.push_back(p0);
-				vertices.push_back({ s, s });
-				vertices.push_back(p1);
-				vertices.push_back({ s, s });
-				vertices.push_back(p2);
-				vertices.push_back({ s, s });
-			}
-		}
-
-		Ref<VertexBuffer> vbo = VertexBuffer::Create(vertices.data(), vertices.size() * sizeof(glm::vec2));
-		vbo->SetLayout({
-			{ ShaderDataType::Float2 },
-			{ ShaderDataType::Float2 }
-			});
-
-		Ref<VertexArray> vao = VertexArray::Create();
-		vao->AddVertexBuffer(vbo);
-
-		vao->Bind();
-		shader->Bind();
-		shader->SetUniformMat4(0, camera.GetViewProjectionMatrix());
-
-		//glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 2);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-	}
-
-	void Application::DrawVerticesBezier(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref)
-	{
-		std::vector<glm::vec2> vertices;
-		for (const QuadBez& bez : polygon.bezs)
-		{
-			glm::vec2 p0 = bez.p0;
-			glm::vec2 p1 = bez.p1;
 			glm::vec2 p2 = bez.p2;
 
 			float s = p0.x * p1.y + p1.x * p2.y + p2.x * p0.y - p1.x * p0.y - p0.x * p2.y - p2.x * p1.y;
@@ -174,7 +125,47 @@ namespace SvgRenderer {
 		shader->Bind();
 		shader->SetUniformMat4(0, camera.GetViewProjectionMatrix());
 
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 2);
+	}
+
+	void Application::DrawVerticesBezier(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref)
+	{
+		std::vector<glm::vec2> vertices;
+		for (const QuadBez& bez : polygon.bezs)
+		{
+			glm::vec2 p0 = bez.p0;
+			glm::vec2 p1 = bez.p1;
+			glm::vec2 p2 = bez.p2;
+
+			float s = p0.x * p1.y + p1.x * p2.y + p2.x * p0.y - p1.x * p0.y - p0.x * p2.y - p2.x * p1.y;
+			if (s > 0.0f)
+				s = 1.0f;
+			else if (s < 0.0f)
+				s = -1.0f;
+			else
+				s = 0.0f;
+
+			vertices.push_back(p0);
+			vertices.push_back({ s, s });
+			vertices.push_back(p1);
+			vertices.push_back({ s, s });
+			vertices.push_back(p2);
+			vertices.push_back({ s, s });
+		}
+
+		Ref<VertexBuffer> vbo = VertexBuffer::Create(vertices.data(), vertices.size() * sizeof(glm::vec2));
+		vbo->SetLayout({
+			{ ShaderDataType::Float2 },
+			{ ShaderDataType::Float2 }
+		});
+
+		Ref<VertexArray> vao = VertexArray::Create();
+		vao->AddVertexBuffer(vbo);
+
+		vao->Bind();
+		shader->Bind();
+		shader->SetUniformMat4(0, camera.GetViewProjectionMatrix());
+
 		glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 2);
 	}
 
@@ -202,18 +193,10 @@ namespace SvgRenderer {
 		centroid = { 0, 0 };
 
 		glStencilMask(0xFF);
-		glStencilFunc(GL_ALWAYS, 1, 0xFF);
-		glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+		glStencilFunc(GL_ALWAYS, 0, 0xFF);
+		glStencilOp(GL_KEEP, GL_KEEP, GL_INVERT);
 		DrawVertices(polygon, centroid, triangleShader, 1.0f);
-		DrawVerticesBezier(polygon, centroid, bezierShader, -1.0f);
-
-		glStencilOp(GL_KEEP, GL_KEEP, GL_DECR);
-		DrawVertices(polygon, centroid, triangle2Shader, -1.0f);
-		DrawVerticesBezier(polygon, centroid, bezier2Shader, 1.0f);
-
-		glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-		DrawVertices(polygon, centroid, triangleShader, 0.0f);
-		DrawVerticesBezier(polygon, centroid, bezierShader, 0.0f);
+		DrawVerticesBezier(polygon, centroid, bezierShader, 5.0f);
 	}
 
 	void Application::Run()
@@ -266,6 +249,15 @@ namespace SvgRenderer {
 		p.lines.push_back(LineBez{ .p0 = { 500, 300 }, .p1 = { 690, 290 } });
 		PreprocessPolygon(p);
 
+		// M 100 100 L 690 290 Q 600 400 500 300 Z M 650 300 Q 625 150 600 300 Z
+		CurvedPolygon pp;
+		pp.lines.push_back(LineBez{ .p0 = { 100, 100 }, .p1 = { 690, 290 } });
+		pp.bezs.push_back(QuadBez{ .p0 = { 690, 290 }, .p1 = { 600, 400 }, .p2 = { 500, 300 } });
+		pp.lines.push_back(LineBez{ .p0 = { 500, 300 }, .p1 = { 100, 100 } });
+
+		pp.bezs.push_back(QuadBez{ .p0 = { 700, 300 }, .p1 = { 650, 450 }, .p2 = { 600, 300 } });
+		pp.lines.push_back(LineBez{ .p0 = { 600, 300 }, .p1 = { 700, 300 } });
+
 		m_Running = true;
 		glDisable(GL_DEPTH_TEST);
 		while (m_Running)
@@ -288,7 +280,8 @@ namespace SvgRenderer {
 			glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 			//DrawPolygon(polygon);
-			DrawPolygon(p);
+			//DrawPolygon(p);
+			DrawPolygon(pp);
 
 			glBlitNamedFramebuffer(fbo->GetRendererId(), 0,
 				0, 0, 1280, 720,
@@ -296,7 +289,7 @@ namespace SvgRenderer {
 				GL_STENCIL_BUFFER_BIT, GL_NEAREST);
 
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			glStencilMask(0x00);
+			//glStencilMask(0x00);
 			glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 			//glStencilFunc(GL_ALWAYS, 1, 0xFF);
 			glStencilFunc(GL_NOTEQUAL, 0, 0xFF);

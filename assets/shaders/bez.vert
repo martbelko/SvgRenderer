@@ -17,6 +17,6 @@ layout (location = 1) out vec2 v_TexCoords;
 void main()
 {
 	v_Sgn = a_Sgn.x;
-	v_TexCoords = tex_coords[gl_VertexID];
+	v_TexCoords = tex_coords[gl_VertexID % 3];
 	gl_Position = u_ProjView * vec4(a_Pos, 0.0, 1.0);
 }
