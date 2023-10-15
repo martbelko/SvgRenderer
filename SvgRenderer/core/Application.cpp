@@ -195,6 +195,10 @@ namespace SvgRenderer {
 		glStencilMask(0xFF);
 		glStencilFunc(GL_ALWAYS, 0, 0xFF);
 		glStencilOp(GL_KEEP, GL_KEEP, GL_INVERT);
+
+		// Use this for nonzero fill rule
+		//glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_DECR);
+		//glStencilOpSeparate(GL_BACK, GL_KEEP, GL_KEEP, GL_INCR);
 		DrawVertices(polygon, centroid, triangleShader, 1.0f);
 		DrawVerticesBezier(polygon, centroid, bezierShader, 5.0f);
 	}
@@ -276,7 +280,9 @@ namespace SvgRenderer {
 
 			glEnable(GL_STENCIL_TEST);
 			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-			glClearStencil(0);
+
+			glClearStencil(0); // Change this to glClearStencil(100) for nonzero fill rule
+
 			glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
 			//DrawPolygon(polygon);
@@ -292,7 +298,7 @@ namespace SvgRenderer {
 			//glStencilMask(0x00);
 			glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 			//glStencilFunc(GL_ALWAYS, 1, 0xFF);
-			glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
+			glStencilFunc(GL_NOTEQUAL, 0, 0xFF); // Change this to glStencilFunc(GL_NOTEQUAL, 100, 0xFF) for nonzero fill rule
 			Renderer::RenderFramebuffer(fbo);
 
 			// glDisable(GL_STENCIL_TEST);
