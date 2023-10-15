@@ -128,6 +128,7 @@ namespace SvgRenderer {
 		glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 2);
 	}
 
+	bool cc = false;
 	void Application::DrawVerticesBezier(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref)
 	{
 		std::vector<glm::vec2> vertices;
@@ -165,6 +166,7 @@ namespace SvgRenderer {
 		vao->Bind();
 		shader->Bind();
 		shader->SetUniformMat4(0, camera.GetViewProjectionMatrix());
+		shader->SetUniformInt(1, cc ? 1 : 0);
 
 		glDrawArrays(GL_TRIANGLES, 0, vertices.size() / 2);
 	}
@@ -191,10 +193,6 @@ namespace SvgRenderer {
 		}
 		centroid /= polygon.lines.size() * 2 + polygon.bezs.size() * 3;
 		centroid = { 0, 0 };
-
-		glStencilMask(0xFF);
-		glStencilFunc(GL_ALWAYS, 0, 0xFF);
-		glStencilOp(GL_KEEP, GL_KEEP, GL_INVERT);
 
 		// Use this for nonzero fill rule
 		//glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_KEEP, GL_DECR);
@@ -249,9 +247,8 @@ namespace SvgRenderer {
 		CurvedPolygon p;
 		//p.bezs.push_back(QuadBez{ .p0 = { 650, 300 }, .p1 = { 625, 150 }, .p2 = { 600, 300 } });
 		//p.lines.push_back(LineBez{ .p0 = { 600, 300 }, .p1 = { 650, 300 } });
-		p.bezs.push_back(QuadBez{ .p0 = { 690, 290 }, .p1 = { 600, 600 }, .p2 = { 500, 300 } });
-		p.lines.push_back(LineBez{ .p0 = { 500, 300 }, .p1 = { 690, 290 } });
-		PreprocessPolygon(p);
+		p.bezs.push_back(QuadBez{ .p0 = { 50, 50 }, .p1 = { 610, 700 }, .p2 = { 1220, 50 } });
+		p.lines.push_back(LineBez{ .p0 = { 1220, 50 }, .p1 = { 50, 50 } });
 
 		// M 100 100 L 690 290 Q 600 400 500 300 Z M 650 300 Q 625 150 600 300 Z
 		CurvedPolygon pp;
@@ -264,9 +261,11 @@ namespace SvgRenderer {
 
 		m_Running = true;
 		glDisable(GL_DEPTH_TEST);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		while (m_Running)
 		{
-			fbo->Bind();
+			// fbo->Bind();
 
 			// Renderer::BeginScene(camera);
 			//
@@ -285,21 +284,27 @@ namespace SvgRenderer {
 
 			glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
+			glStencilMask(0xFF);
+			glStencilFunc(GL_ALWAYS, 0, 0xFF);
+			glStencilOp(GL_KEEP, GL_KEEP, GL_INVERT);
 			//DrawPolygon(polygon);
-			//DrawPolygon(p);
 			DrawPolygon(pp);
+			//DrawPolygon(pp);
 
-			glBlitNamedFramebuffer(fbo->GetRendererId(), 0,
-				0, 0, 1280, 720,
-				0, 0, 1280, 720,
-				GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+			glClear(GL_COLOR_BUFFER_BIT);
 
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			// glBlitNamedFramebuffer(fbo->GetRendererId(), 0,
+			// 	0, 0, 1280, 720,
+			// 	0, 0, 1280, 720,
+			// 	GL_STENCIL_BUFFER_BIT, GL_NEAREST);
+
+			//glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			//glStencilMask(0x00);
 			glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 			//glStencilFunc(GL_ALWAYS, 1, 0xFF);
 			glStencilFunc(GL_NOTEQUAL, 0, 0xFF); // Change this to glStencilFunc(GL_NOTEQUAL, 100, 0xFF) for nonzero fill rule
-			Renderer::RenderFramebuffer(fbo);
+			DrawPolygon(pp);
+			// Renderer::RenderFramebuffer(fbo);
 
 			// glDisable(GL_STENCIL_TEST);
 			//
@@ -324,6 +329,10 @@ namespace SvgRenderer {
 
 	void Application::OnKeyPressed(int key, int repeat)
 	{
+		if (key == GLFW_KEY_W)
+		{
+			cc = !cc;
+		}
 	}
 
 	void Application::OnKeyReleased(int key)

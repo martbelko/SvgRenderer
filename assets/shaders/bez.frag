@@ -3,13 +3,31 @@
 layout (location = 0) in flat float v_Sgn;
 layout (location = 1) in vec2 v_TexCoords;
 
+layout (location = 1) uniform int cc;
+
 layout (location = 0) out vec4 FragColor;
 
 void main()
 {
-	float res = v_TexCoords.x * v_TexCoords.x - v_TexCoords.y;
-	if (res < 0.0)
-		FragColor = vec4(0, 1, 0, 1);
-	else
+	vec2 px = dFdx(v_TexCoords);
+	vec2 py = dFdy(v_TexCoords);
+
+	// Chain rule
+	float fx = (2 * v_TexCoords.x) * px.x - px.y;
+	float fy = (2 * v_TexCoords.x) * py.x - py.y;
+
+	// Signed distance
+	float sd = (v_TexCoords.x * v_TexCoords.x - v_TexCoords.y) / sqrt(fx * fx + fy * fy);
+
+	// Linear alpha
+	float alpha = 0.5 - sd;
+	if (alpha > 1) // Inside
+		alpha = 1;
+	else if (alpha < 0)  // Outside
 		discard;
+
+	if (cc == 1)
+		FragColor = vec4(0, 1, 0, alpha);
+	else
+		FragColor = vec4(0, 1, 0, 1);
 }
