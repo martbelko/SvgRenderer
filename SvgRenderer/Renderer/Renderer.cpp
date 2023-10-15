@@ -238,6 +238,7 @@ namespace SvgRenderer {
 		//Framebuffer::BindDefaultFramebuffer();
 		emptyVao->Bind();
 		s_DisplayFboShader->Bind();
+		glDisable(GL_DEPTH_TEST);
 		glBindTextureUnit(0, fbo->GetColorAttachmentRendererID());
 		glDrawArrays(GL_TRIANGLES, 0, 3);
 	}

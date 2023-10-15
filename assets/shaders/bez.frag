@@ -1,9 +1,6 @@
 #version 460 core
 
-layout (location = 0) in flat float v_Sgn;
-layout (location = 1) in vec2 v_TexCoords;
-
-layout (location = 1) uniform int cc;
+layout (location = 0) in vec2 v_TexCoords;
 
 layout (location = 0) out vec4 FragColor;
 
@@ -26,8 +23,5 @@ void main()
 	else if (alpha < 0)  // Outside
 		discard;
 
-	if (cc == 1)
-		FragColor = vec4(0, 1, 0, alpha);
-	else
-		FragColor = vec4(0, 1, 0, 1);
+	FragColor = vec4(0, 1, 0, alpha);
 }
