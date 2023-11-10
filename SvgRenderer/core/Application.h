@@ -29,10 +29,6 @@ namespace SvgRenderer {
 
 		static void OnViewportResizeStatic(uint32_t width, uint32_t height) { Get().OnViewportResize(width, height); }
 	private:
-		void DrawVertices(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref);
-		void DrawVerticesBezier(const CurvedPolygon& polygon, const glm::vec2& centroid, const Ref<Shader>& shader, float ref);
-		void DrawPolygon(const CurvedPolygon& polygon);
-	private:
 		Application() = default;
 
 		void OnWindowClose();

@@ -71,8 +71,8 @@ namespace SvgRenderer {
 		FillRenderer fillRenderer;
 		fillRenderer.Init();
 
-		FillPath path1 = FillPathBuilder().MoveTo({ 50, 50 }).QuadTo({ 610, 700 }, { 1220, 50 }).LineTo({ 50, 50 }).Build();
-		FillPath path2 = FillPathBuilder().MoveTo({ 50, 700 }).QuadTo({ 250, 500 }, { 450, 700 }).LineTo({ 50, 700 }).Build();
+		FillPath path1 = FillPathBuilder().MoveTo({ 50, 50 }).QuadTo({ 610, 700 }, { 1220, 50 }).LineTo({ 50, 50 })     .Build();
+		FillPath path2 = FillPathBuilder().MoveTo({ 50, 700 }).QuadTo({ 250, 500 }, { 450, 700 }).LineTo({ 50, 700 })   .Build();
 		FillPath path3 = FillPathBuilder().MoveTo({ 750, 700 }).QuadTo({ 950, 500 }, { 1150, 700 }).LineTo({ 750, 700 }).Build();
 
 		while (m_Running)
