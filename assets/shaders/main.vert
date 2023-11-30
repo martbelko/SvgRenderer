@@ -1,14 +1,19 @@
-#version 460 core
+#version 450
 
-layout (location = 0) in vec2 a_Pos;
-layout (location = 1) in vec4 a_Color;
+layout(location = 0) uniform uvec2 res;
+layout(location = 1) uniform uvec2 atlas_size;
 
-layout (location = 0) uniform mat4 u_ProjView;
+layout(location = 0) in vec2 pos;
+layout(location = 1) in vec2 uv;
+layout(location = 2) in vec4 col;
 
-layout (location = 0) out vec4 v_Color;
+out vec2 v_uv;
+out vec4 v_col;
 
 void main()
 {
-	v_Color = a_Color;
-	gl_Position = u_ProjView * vec4(a_Pos, 0.0, 1.0);
+	vec2 scaled = 2.0 * pos / vec2(res);
+	gl_Position = vec4(scaled.x - 1.0, 1.0 - scaled.y, 0.0, 1.0);
+	v_uv = uv / vec2(atlas_size);
+	v_col = col;
 }

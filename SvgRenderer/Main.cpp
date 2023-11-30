@@ -3,6 +3,8 @@
 #include "core/Filesystem.h"
 #include "core/Application.h"
 
+#include <glm/glm.hpp>
+
 using namespace SvgRenderer;
 
 int main(int argc, char** argv)

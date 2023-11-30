@@ -8,7 +8,8 @@
 #include "Renderer/Shader.h"
 #include "Renderer/Framebuffer.h"
 #include "Renderer/Renderer.h"
-#include "Renderer/FillRenderer.h"
+#include "Renderer/TileBuilder.h"
+#include "Renderer/Rasterizer.h"
 
 #include "Scene/OrthographicCamera.h"
 
@@ -19,11 +20,14 @@
 
 namespace SvgRenderer {
 
+	constexpr uint32_t SCREEN_WIDTH = 1280;
+	constexpr uint32_t SCREEN_HEIGHT = 720;
+
 	Application Application::s_Instance;
 
 	void Application::Init()
 	{
-		uint32_t initWidth = 1280, initHeight = 720;
+		uint32_t initWidth = SCREEN_WIDTH, initHeight = SCREEN_HEIGHT;
 
 		m_Window = Window::Create({
 			.width = initWidth,
@@ -52,81 +56,113 @@ namespace SvgRenderer {
 
 	void Application::Run()
 	{
+		TileBuilder builder;
+
+		Rasterizer rasterizer;
+		std::vector<PathCmd> path;
+		path.push_back(MoveToCmd({ 400, 300 }));
+		path.push_back(QuadToCmd({ 500, 200 }, { 400, 100 }));
+		path.push_back(CubicToCmd({ 350, 150 }, { 100, 250 }, { 400, 300 }));
+		path.push_back(CloseCmd{});
+
+		rasterizer.Fill(path, glm::mat3(1.0f));
+		rasterizer.Finish(builder);
+
+		Ref<Shader> shader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
+
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glEnable(GL_BLEND);
+
+		GLuint tex = 0;
+		glGenTextures(1, &tex);
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexImage2D(
+			GL_TEXTURE_2D,
+			0,
+			GL_R8,
+			ATLAS_SIZE,
+			ATLAS_SIZE,
+			0,
+			GL_RED,
+			GL_UNSIGNED_BYTE,
+			builder.atlas.data()
+		);
+
+		GLuint vbo = 0;
+		GLuint ibo = 0;
+		GLuint vao = 0;
+		glGenVertexArrays(1, &vao);
+		glBindVertexArray(vao);
+
+		glGenBuffers(1, &vbo);
+		glBindBuffer(GL_ARRAY_BUFFER, vbo);
+		glBufferData(GL_ARRAY_BUFFER, builder.vertices.size() * sizeof(Vertex), builder.vertices.data(), GL_STREAM_DRAW);
+
+		glGenBuffers(1, &ibo);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+		glBufferData(
+			GL_ELEMENT_ARRAY_BUFFER,
+			builder.indices.size() * sizeof(uint32_t),
+			builder.indices.data(),
+			GL_STREAM_DRAW
+		);
+
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(
+			0,
+			2,
+			GL_SHORT,
+			GL_FALSE,
+			sizeof(Vertex),
+			(const void*)0
+			);
+
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(
+			1,
+			2,
+			GL_UNSIGNED_SHORT,
+			GL_FALSE,
+			sizeof(Vertex),
+			(const void*)4
+			);
+
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(
+			2,
+			4,
+			GL_UNSIGNED_BYTE,
+			GL_TRUE,
+			sizeof(Vertex),
+			(const void*)8
+			);
+
+		shader->Bind();
+
+		glUniform2ui(0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+		glUniform2ui(1, ATLAS_SIZE, ATLAS_SIZE);
+
+		glBindTextureUnit(0, tex);
+
 		camera.SetPosition(glm::vec3(0, 0, 0.5f));
 
-		FramebufferDesc fbDesc;
-		fbDesc.width = 1280;
-		fbDesc.height = 720;
-		fbDesc.attachments = {
-			{ FramebufferTextureFormat::RGBA8 },
-			{ FramebufferTextureFormat::DEPTH24STENCIL8 }
-		};
-
-		Ref<Framebuffer> fbo = Framebuffer::Create(fbDesc);
-
 		m_Running = true;
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-		FillRenderer fillRenderer;
-		fillRenderer.Init();
-
-		FillPath path1 = FillPathBuilder().MoveTo({ 50, 50 }).QuadTo({ 610, 700 }, { 1220, 50 }).LineTo({ 50, 50 })     .Build();
-		FillPath path2 = FillPathBuilder().MoveTo({ 50, 700 }).QuadTo({ 250, 500 }, { 450, 700 }).LineTo({ 50, 700 })   .Build();
-		FillPath path3 = FillPathBuilder().MoveTo({ 750, 700 }).QuadTo({ 950, 500 }, { 1150, 700 }).LineTo({ 750, 700 }).Build();
-
 		while (m_Running)
 		{
-			fbo->Bind();
+			glClearColor(1.0, 1.0, 1.0, 1.0);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glDrawElements(
+				GL_TRIANGLES,
+				builder.indices.size(),
+				GL_UNSIGNED_INT,
+				nullptr
+				);
 
-			glEnable(GL_STENCIL_TEST);
-			glEnable(GL_DEPTH_TEST);
-			glDepthFunc(GL_LEQUAL);
-
-			glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-			glClearStencil(0); // Change this to glClearStencil(100) for nonzero fill rule
-
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
-			glStencilMask(0xFF);
-			glStencilFunc(GL_ALWAYS, 0, 0xFF);
-			glStencilOp(GL_KEEP, GL_KEEP, GL_INVERT);
-
-			fillRenderer.BeginScene(camera);
-
-			fillRenderer.DrawPath(path1);
-			fillRenderer.DrawPath(path2);
-			fillRenderer.DrawPath(path3);
-
-			fillRenderer.EndScene();
-
-			// glClear(GL_COLOR_BUFFER_BIT);
-
-			glBlitNamedFramebuffer(fbo->GetRendererId(), 0,
-				0, 0, 1280, 720,
-				0, 0, 1280, 720,
-				GL_STENCIL_BUFFER_BIT, GL_NEAREST);
-
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			glStencilMask(0x00);
-			glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-			//glStencilFunc(GL_ALWAYS, 1, 0xFF);
-			glStencilFunc(GL_NOTEQUAL, 0, 0xFF); // Change this to glStencilFunc(GL_NOTEQUAL, 100, 0xFF) for nonzero fill rule
-			Renderer::RenderFramebuffer(fbo);
-
-			// glDisable(GL_STENCIL_TEST);
-			//
-			// Renderer::BeginScene(camera);
-			//
-			// Path2DContext* ctx = Renderer::BeginPath(glm::vec2(100, 100), glm::mat4(1.0f));
-			// Renderer::LineTo(ctx, glm::vec2(690, 290));
-			// Renderer::QuadTo(ctx, glm::vec2(600, 600), glm::vec2(500, 300));
-			// Renderer::EndPath(ctx, true);
-			// delete ctx;
-			//
-			// Renderer::EndScene();
-
-			// FillPath path = FillPathBuilder().MoveTo().LineTo().LineTo().Close().MoveTo().QuadTo().Build();
+			glFinish();
 
 			m_Window->OnUpdate();
 		}

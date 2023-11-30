@@ -1,10 +1,13 @@
-#version 460 core
+#version 450
 
-layout (location = 0) in vec4 v_Color;
+layout(binding = 0) uniform sampler2D tex;
 
-layout (location = 0) out vec4 FragColor;
+in vec2 v_uv;
+in vec4 v_col;
+
+out vec4 f_col;
 
 void main()
 {
-	FragColor = v_Color;
+	f_col = vec4(1, 0, 0, 1) * vec4(1.0, 1.0, 1.0, texture(tex, v_uv).r);
 }

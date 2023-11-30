@@ -2,6 +2,9 @@
 
 #include "core/Window.h"
 
+#include "Renderer/TileBuilder.h"
+#include "Renderer/Rasterizer.h"
+
 #include <glm/glm.hpp>
 
 namespace SvgRenderer {
