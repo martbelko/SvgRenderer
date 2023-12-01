@@ -1,6 +1,7 @@
 #include "Application.h"
 
 #include "Core/Filesystem.h"
+#include "Core/SvgParser.h"
 
 #include "Renderer/VertexBuffer.h"
 #include "Renderer/IndexBuffer.h"
@@ -17,6 +18,9 @@
 #include <glad/glad.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <vector>
 
 namespace SvgRenderer {
 
@@ -24,6 +28,46 @@ namespace SvgRenderer {
 	constexpr uint32_t SCREEN_HEIGHT = 720;
 
 	Application Application::s_Instance;
+
+	static void Render(const SvgNode* node, TileBuilder& builder)
+	{
+		switch (node->type)
+		{
+		case SvgNodeType::Path:
+		{
+			const SvgPath& path = node->as.path;
+
+			std::vector<PathCmd> cmds;
+			for (const SvgPath::Segment& seg : path.segments)
+			{
+				switch (seg.type)
+				{
+				case SvgPath::Segment::Type::MoveTo:
+					cmds.push_back(PathCmd(MoveToCmd{ .point = seg.as.moveTo.p }));
+					break;
+				case SvgPath::Segment::Type::LineTo:
+					cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
+					break;
+				// TODO: Implement others
+				}
+			}
+
+			cmds.push_back(CloseCmd{});
+
+			const SvgColor& c = path.fill.color;
+			builder.color = { c.r, c.g, c.r, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
+
+			Rasterizer rast;
+			rast.Fill(cmds, path.transform);
+			rast.Finish(builder);
+
+			break;
+		}
+		}
+
+		for (const SvgNode* child : node->children)
+			Render(child, builder);
+	}
 
 	void Application::Init()
 	{
@@ -44,6 +88,10 @@ namespace SvgRenderer {
 		});
 
 		Renderer::Init(initWidth, initHeight);
+
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/test2.svg");
+
+		Render(root, m_TileBuilder);
 	}
 
 	void Application::Shutdown()
@@ -56,8 +104,6 @@ namespace SvgRenderer {
 
 	void Application::Run()
 	{
-		TileBuilder builder;
-
 		Rasterizer rasterizer;
 		std::vector<PathCmd> path;
 		path.push_back(MoveToCmd({ 400, 300 }));
@@ -65,8 +111,9 @@ namespace SvgRenderer {
 		path.push_back(CubicToCmd({ 350, 150 }, { 100, 250 }, { 400, 300 }));
 		path.push_back(CloseCmd{});
 
-		rasterizer.Fill(path, glm::mat3(1.0f));
-		rasterizer.Finish(builder);
+		//glm::mat3 s = glm::scale(glm::mat4(1.0f), { 2, 2, 2 });
+		//rasterizer.Fill(path, s);
+		//rasterizer.Finish(m_TileBuilder);
 
 		Ref<Shader> shader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
 
@@ -88,7 +135,7 @@ namespace SvgRenderer {
 			0,
 			GL_RED,
 			GL_UNSIGNED_BYTE,
-			builder.atlas.data()
+			m_TileBuilder.atlas.data()
 		);
 
 		GLuint vbo = 0;
@@ -99,14 +146,14 @@ namespace SvgRenderer {
 
 		glGenBuffers(1, &vbo);
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glBufferData(GL_ARRAY_BUFFER, builder.vertices.size() * sizeof(Vertex), builder.vertices.data(), GL_STREAM_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), GL_STREAM_DRAW);
 
 		glGenBuffers(1, &ibo);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 		glBufferData(
 			GL_ELEMENT_ARRAY_BUFFER,
-			builder.indices.size() * sizeof(uint32_t),
-			builder.indices.data(),
+			m_TileBuilder.indices.size() * sizeof(uint32_t),
+			m_TileBuilder.indices.data(),
 			GL_STREAM_DRAW
 		);
 
@@ -157,7 +204,7 @@ namespace SvgRenderer {
 			glClear(GL_COLOR_BUFFER_BIT);
 			glDrawElements(
 				GL_TRIANGLES,
-				builder.indices.size(),
+				m_TileBuilder.indices.size(),
 				GL_UNSIGNED_INT,
 				nullptr
 				);

@@ -4,3 +4,9 @@
 [submodule "modules/glm/ext"]
 	path = modules/glm/ext
 	url = https://github.com/g-truc/glm
+[submodule "modules/tinyxml2/ext"]
+	path = modules/tinyxml2/ext
+	url = https://github.com/leethomason/tinyxml2
+[submodule "modules/cppcoro/ext"]
+	path = modules/cppcoro/ext
+	url = https://github.com/andreasbuhr/cppcoro

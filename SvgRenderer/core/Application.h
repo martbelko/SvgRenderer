@@ -46,6 +46,8 @@ namespace SvgRenderer {
 	private:
 		bool m_Running = false;
 		Scope<Window> m_Window;
+
+		TileBuilder m_TileBuilder;
 	private:
 		static Application s_Instance;
 	};
