@@ -8,7 +8,10 @@ namespace SvgRenderer {
 
 	static glm::vec2 ApplyTransform(const glm::mat3& transform, const glm::vec2& point)
 	{
-		return transform * glm::vec3(point, 0.0f);
+		glm::vec2 res;
+		res = glm::mat2(transform) * glm::vec3(point, 0.0f) + glm::vec2(324.90716f, 255.00942f);
+		SR_TRACE("Transform ({0};{1}) into ({2};{3})", point.x, point.y, res.x, res.y);
+		return res;
 	}
 
 	PathCmd PathCmd::Transform(const glm::mat3& transform) const
@@ -64,7 +67,7 @@ namespace SvgRenderer {
 			const glm::vec2 a = -1.0f * last + 3.0f * as.cubicTo.p1 - 3.0f * as.cubicTo.p2 + as.cubicTo.p3;
 			const glm::vec2 b = 3.0f * (last - 2.0f * as.cubicTo.p1 + as.cubicTo.p2);
 			const float conc = glm::max(glm::length(b), glm::length(a + b));
-			const float dt = std::sqrt((std::sqrt(8.0f) * tolerance) / conc);
+			const float dt = glm::sqrt((glm::sqrt(8.0f) * tolerance) / conc);
 			float t = 0.0f;
 			while (t < 1.0f)
 			{

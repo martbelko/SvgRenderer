@@ -15,14 +15,24 @@ namespace SvgRenderer {
 
 		while (!str.empty())
 		{
-			size_t index = str.find_first_not_of(nums);
+			float sign = str[0] == '-' ? -1.0f : 1.0f;
+			if (sign < 1.0f)
+			{
+				str = str.substr(1, std::string_view::npos);
+			}
+
+			size_t index = str.find_first_not_of("0123456789.");
+
 			float value;
 			std::string_view numStr = str.substr(0, index);
 			std::stringstream ss;
 			ss << numStr;
 			ss >> value;
 
-			co_yield value;
+			co_yield value * sign;
+
+			if (index == std::string_view::npos)
+				break;
 
 			str = str.substr(index + 1, std::string_view::npos);
 			size_t nextIndex = str.find_first_of(nums);
@@ -35,6 +45,8 @@ namespace SvgRenderer {
 
 	cppcoro::generator<const std::pair<char, std::vector<float>>&> SvgParser::ParseNumbersUntilOneOf(std::string_view str, std::string_view untilOneOf)
 	{
+		const char* nums = "0123456789.-";
+
 		str = str.substr(str.find_first_of(str), std::string_view::npos);
 
 		while (!str.empty())
@@ -44,12 +56,21 @@ namespace SvgRenderer {
 			size_t index = str.find_first_of(untilOneOf);
 			if (index == std::string_view::npos)
 			{
-				co_yield result;
-				break;
+				if (str.find_first_of(nums) == std::string::npos)
+				{
+					co_yield result;
+					break;
+				}
+				else
+				{
+					index = str.length();
+				}
 			}
 
-			auto vv = str.substr(1, index - 1);
-			for (float value : ParseNumbersLine(str.substr(1, index - 1)))
+			std::string_view lineStr = str.substr(0, index);
+			lineStr = lineStr.substr(lineStr.find_first_of(nums), std::string_view::npos);
+
+			for (float value : ParseNumbersLine(lineStr))
 				result.second.push_back(value);
 
 			co_yield result;
@@ -141,7 +162,7 @@ namespace SvgRenderer {
 
 	std::vector<SvgPath::Segment> SvgParser::ParsePathString(std::string_view str)
 	{
-		const char* tokens = "MmLlQqCcZz";
+		const char* tokens = "MmLlHhVvQqCcZzSsTt";
 
 		std::vector<SvgPath::Segment> segments;
 
@@ -151,46 +172,280 @@ namespace SvgRenderer {
 			switch (token)
 			{
 			case 'M':
-				if (nums.size() == 2)
+				if (nums.size() % 2 == 0)
 				{
-					glm::vec2 point = { nums[0], nums[1] };
-					segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
-					prevPoint = point;
+					for (size_t i = 0; i < nums.size(); i += 2)
+					{
+						glm::vec2 point = { nums[i], nums[i + 1] };
+						segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
+						prevPoint = point;
+					}
 				}
 				else
 					SR_WARN("Invalid 'M' in path");
 				break;
 			case 'm':
-				if (nums.size() == 2)
+				if (nums.size() % 2 == 0)
 				{
-					glm::vec2 point = prevPoint + glm::vec2(nums[0], nums[1]);
-					segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
-					prevPoint = point;
+					for (size_t i = 0; i < nums.size(); i += 2)
+					{
+						glm::vec2 point = prevPoint + glm::vec2(nums[i], nums[i + 1]);
+						segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
+						prevPoint = point;
+					}
 				}
 				else
 					SR_WARN("Invalid 'm' in path");
 				break;
 			case 'L':
-				if (nums.size() == 2)
+				if (nums.size() % 2 == 0)
 				{
-					glm::vec2 point = { nums[0], nums[1] };
-					segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
-					prevPoint = point;
+					for (size_t i = 0; i < nums.size(); i += 2)
+					{
+						glm::vec2 point = { nums[i], nums[i + 1] };
+						segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
+						prevPoint = point;
+					}
 				}
 				else
 					SR_WARN("Invalid 'M' in path");
 				break;
 			case 'l':
-				if (nums.size() == 2)
+				if (nums.size() % 2 == 0)
 				{
-					glm::vec2 point = prevPoint + glm::vec2(nums[0], nums[1]);
-					segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
-					prevPoint = point;
+					for (size_t i = 0; i < nums.size(); i += 2)
+					{
+						glm::vec2 point = prevPoint + glm::vec2(nums[i], nums[i + 1]);
+						segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
+						prevPoint = point;
+					}
 				}
 				else
 					SR_WARN("Invalid 'l' in path");
 				break;
-			// TODO: Implement others
+			case 'Z':
+			case 'z':
+				if (nums.empty())
+				{
+					segments.push_back(SvgPath::Segment(SvgPath::Close{}));
+				}
+				else
+					SR_WARN("Invalid 'Z/z' in path");
+				break;
+			case 'H':
+				if (!nums.empty())
+				{
+					glm::vec2 point = { nums[nums.size() - 1], prevPoint.y };
+					segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
+					prevPoint = point;
+				}
+				else
+					SR_WARN("Invalid 'H' in path");
+				break;
+			case 'h':
+				if (!nums.empty())
+				{
+					float accum = 0.0f;
+					for (float n : nums)
+						accum += n;
+
+					glm::vec2 point = { prevPoint.x + accum, prevPoint.y };
+					segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
+					prevPoint = point;
+				}
+				else
+					SR_WARN("Invalid 'h' in path");
+				break;
+			case 'V':
+				if (!nums.empty())
+				{
+					glm::vec2 point = { prevPoint.x, nums[nums.size() - 1]};
+					segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
+					prevPoint = point;
+				}
+				else
+					SR_WARN("Invalid 'V' in path");
+				break;
+			case 'v':
+				if (!nums.empty())
+				{
+					float accum = 0.0f;
+					for (float n : nums)
+						accum += n;
+
+					glm::vec2 point = { prevPoint.x, prevPoint.y + accum };
+					segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
+					prevPoint = point;
+				}
+				else
+					SR_WARN("Invalid 'v' in path");
+				break;
+			case 'Q':
+				if (nums.size() % 4 == 0)
+				{
+					for (size_t i = 0; i < nums.size(); i += 4)
+					{
+						glm::vec2 p1 = { nums[i + 0], nums[i + 1] };
+						glm::vec2 p2 = { nums[i + 2], nums[i + 3] };
+						segments.push_back(SvgPath::Segment(SvgPath::QuadTo{ .p1 = p1, .p2 = p2 }));
+						prevPoint = p2;
+					}
+				}
+				else
+					SR_WARN("Invalid 'Q' in path");
+				break;
+			case 'q':
+				if (nums.size() % 4 == 0)
+				{
+					for (size_t i = 0; i < nums.size(); i += 4)
+					{
+						glm::vec2 p1 = prevPoint + glm::vec2(nums[i + 0], nums[i + 1]);
+						glm::vec2 p2 = prevPoint + glm::vec2(nums[i + 2], nums[i + 3]);
+						segments.push_back(SvgPath::Segment(SvgPath::QuadTo{ .p1 = p1, .p2 = p2 }));
+						prevPoint = p2;
+					}
+				}
+				else
+					SR_WARN("Invalid 'q' in path");
+				break;
+			case 'C':
+				if (nums.size() % 6 == 0)
+				{
+					for (size_t i = 0; i < nums.size(); i += 6)
+					{
+						glm::vec2 p1 = { nums[i + 0], nums[i + 1] };
+						glm::vec2 p2 = { nums[i + 2], nums[i + 3] };
+						glm::vec2 p3 = { nums[i + 4], nums[i + 5] };
+						segments.push_back(SvgPath::Segment(SvgPath::CubicTo{ .p1 = p1, .p2 = p2, .p3 = p3 }));
+						prevPoint = p3;
+					}
+				}
+				else
+					SR_WARN("Invalid 'C' in path");
+				break;
+			case 'c':
+				if (nums.size() % 6 == 0)
+				{
+					for (size_t i = 0; i < nums.size(); i += 6)
+					{
+						glm::vec2 p1 = prevPoint + glm::vec2(nums[i + 0], nums[i + 1]);
+						glm::vec2 p2 = prevPoint + glm::vec2(nums[i + 2], nums[i + 3]);
+						glm::vec2 p3 = prevPoint + glm::vec2(nums[i + 4], nums[i + 5]);
+						segments.push_back(SvgPath::Segment(SvgPath::CubicTo{ .p1 = p1, .p2 = p2, .p3 = p3 }));
+						prevPoint = p3;
+					}
+				}
+				else
+					SR_WARN("Invalid 'c' in path");
+				break;
+			case 'T':
+				if (nums.size() % 2 == 0)
+				{
+					// TODO: Could be optimized, because after one loop, we know there will be quad segment as the last one
+					for (size_t i = 0; i < nums.size(); i += 2)
+					{
+						if (segments.empty() || segments.back().type != SvgPath::Segment::Type::QuadTo)
+						{
+							glm::vec2 point = { nums[i], nums[i + 1] };
+							segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
+							prevPoint = point;
+						}
+						else
+						{
+							const SvgPath::QuadTo& prevQuad = segments.back().as.quadTo;
+							glm::vec2 p1 = prevPoint + (prevPoint - prevQuad.p1);
+							glm::vec2 p2 = { nums[i], nums[i + 1] };
+							segments.push_back(SvgPath::Segment(SvgPath::QuadTo{ .p1 = p1, .p2 = p2 }));
+							prevPoint = p2;
+						}
+					}
+				}
+				else
+					SR_WARN("Invalid 'T' in path");
+				break;
+			case 't':
+				if (nums.size() % 2 == 0)
+				{
+					// TODO: Could be optimized, same reason as above
+					for (size_t i = 0; i < nums.size(); i += 2)
+					{
+						if (segments.empty() || segments.back().type != SvgPath::Segment::Type::QuadTo)
+						{
+							glm::vec2 p1 = prevPoint;
+							glm::vec2 p2 = prevPoint + glm::vec2(nums[i], nums[i + 1]);
+							segments.push_back(SvgPath::Segment(SvgPath::QuadTo{ .p1 = p1, .p2 = p2 }));
+							prevPoint = p2;
+						}
+						else
+						{
+							const SvgPath::QuadTo& prevQuad = segments.back().as.quadTo;
+							glm::vec2 p1 = prevPoint + (prevPoint - prevQuad.p1);
+							glm::vec2 p2 = prevPoint + glm::vec2(nums[i], nums[i + 1]);
+							segments.push_back(SvgPath::Segment(SvgPath::QuadTo{ .p1 = p1, .p2 = p2 }));
+							prevPoint = p2;
+						}
+					}
+				}
+				else
+					SR_WARN("Invalid 't' in path");
+				break;
+			case 'S':
+				if (nums.size() % 4 == 0)
+				{
+					// TODO: Could be optimized, same reason as above
+					for (size_t i = 0; i < nums.size(); i += 4)
+					{
+						if (segments.empty() || segments.back().type != SvgPath::Segment::Type::CubicTo)
+						{
+							glm::vec2 p1 = prevPoint;
+							glm::vec2 p2 = { nums[i + 0], nums[i + 1] };
+							glm::vec2 p3 = { nums[i + 2], nums[i + 3] };
+							segments.push_back(SvgPath::Segment(SvgPath::CubicTo{ .p1 = p1, .p2 = p2, .p3 = p3 }));
+							prevPoint = p3;
+						}
+						else
+						{
+							const SvgPath::CubicTo& prevCubic = segments.back().as.cubicTo;
+							glm::vec2 p1 = prevPoint + (prevPoint - prevCubic.p2);
+							glm::vec2 p2 = { nums[i + 0], nums[i + 1] };
+							glm::vec2 p3 = { nums[i + 2], nums[i + 3] };
+							segments.push_back(SvgPath::Segment(SvgPath::CubicTo{ .p1 = p1, .p2 = p2, .p3 = p3 }));
+							prevPoint = p3;
+						}
+					}
+				}
+				else
+					SR_WARN("Invalid 'S' in path");
+				break;
+			case 's':
+				if (nums.size() % 4 == 0)
+				{
+					// TODO: Could be optimized, same reason as above
+					for (size_t i = 0; i < nums.size(); i += 4)
+					{
+						if (segments.empty() || segments.back().type != SvgPath::Segment::Type::CubicTo)
+						{
+							glm::vec2 p1 = prevPoint;
+							glm::vec2 p2 = prevPoint + glm::vec2(nums[i + 0], nums[i + 1]);
+							glm::vec2 p3 = prevPoint + glm::vec2(nums[i + 2], nums[i + 3]);
+							segments.push_back(SvgPath::Segment(SvgPath::CubicTo{ .p1 = p1, .p2 = p2, .p3 = p3 }));
+							prevPoint = p3;
+						}
+						else
+						{
+							const SvgPath::CubicTo& prevCubic = segments.back().as.cubicTo;
+							glm::vec2 p1 = prevPoint + (prevPoint - prevCubic.p2);
+							glm::vec2 p2 = prevPoint + glm::vec2(nums[i + 0], nums[i + 1]);
+							glm::vec2 p3 = prevPoint + glm::vec2(nums[i + 2], nums[i + 3]);
+							segments.push_back(SvgPath::Segment(SvgPath::CubicTo{ .p1 = p1, .p2 = p2, .p3 = p3 }));
+							prevPoint = p3;
+						}
+					}
+				}
+				else
+					SR_WARN("Invalid 's' in path");
+				break;
+			// TODO: Implement arcs
 			}
 		}
 
@@ -201,10 +456,18 @@ namespace SvgRenderer {
 	{
 		enum Flag : size_t
 		{
-			Fill = 0, Stroke, FillOpacity, StrokeOpacity, StrokeWidth, FillRule
+			Fill = 0,
+			Stroke,
+			FillOpacity,
+			StrokeOpacity,
+			StrokeWidth,
+			FillRule,
+			Transform,
+
+			FlagCount
 		};
 
-		std::bitset<8> flags;
+		std::bitset<Flag::FlagCount> flags;
 
 		SvgGroup group;
 
@@ -252,13 +515,13 @@ namespace SvgRenderer {
 			else if (attrName == "transform")
 			{
 				std::optional<glm::mat3> transform = ParseTransform(attr->Value());
-				group.transform = transform ? *transform : glm::mat3(1.0f);
+				if (transform)
+				{
+					flags.set(Flag::Transform, true);
+					group.transform = *transform;
+				}
 			}
 		}
-
-		// We return nullptr, if the group did not set any flag, because then it does not have any relevant information
-		if (flags.none())
-			return nullptr;
 
 		SvgGroup res;
 		res.fill.color = flags.test(Flag::Fill) ? group.fill.color : previous.fill.color;
@@ -268,7 +531,7 @@ namespace SvgRenderer {
 		res.stroke.color = flags.test(Flag::Stroke) ? group.stroke.color : previous.stroke.color;
 		res.stroke.opacity = flags.test(Flag::StrokeOpacity) ? group.stroke.opacity : previous.stroke.opacity;
 
-		res.transform = group.transform * previous.transform;
+		res.transform = flags.test(Flag::Transform) ? group.transform * previous.transform : previous.transform;
 
 		return new SvgNode(res);
 	}
@@ -277,10 +540,19 @@ namespace SvgRenderer {
 	{
 		enum Flag : size_t
 		{
-			Fill = 0, Stroke, FillOpacity, StrokeOpacity, StrokeWidth, FillRule, Segments
+			Fill = 0,
+			Stroke,
+			FillOpacity,
+			StrokeOpacity,
+			StrokeWidth,
+			FillRule,
+			Transform,
+			Segments,
+
+			FlagCount
 		};
 
-		std::bitset<8> flags;
+		std::bitset<Flag::FlagCount> flags;
 
 		SvgPath path;
 
@@ -328,7 +600,11 @@ namespace SvgRenderer {
 			else if (attrName == "transform")
 			{
 				std::optional<glm::mat3> transform = ParseTransform(attr->Value());
-				path.transform = transform ? *transform : glm::mat3(1.0f);
+				if (transform)
+				{
+					flags.set(Flag::Transform, true);
+					path.transform = *transform;
+				}
 			}
 			else if (attrName == "d")
 			{
@@ -340,7 +616,7 @@ namespace SvgRenderer {
 
 		// We return nullptr, if the group did not set any flag, or dont have
 		// any segments in the path, because then it does not have any relevant information
-		if (flags.none() || path.segments.empty())
+		if (flags.none() && path.segments.empty())
 			return nullptr;
 
 		path.fill.color = flags.test(Flag::Fill) ? group.fill.color : group.fill.color;
@@ -350,7 +626,9 @@ namespace SvgRenderer {
 		path.stroke.color = flags.test(Flag::Stroke) ? group.stroke.color : group.stroke.color;
 		path.stroke.opacity = flags.test(Flag::StrokeOpacity) ? group.stroke.opacity : group.stroke.opacity;
 
-		path.transform = group.transform * group.transform;
+		path.transform = flags.test(Flag::Transform) ? path.transform * group.transform : group.transform;
+		if (path.transform[0][0] > 1000.0f)
+			int xx = 6;
 
 		return new SvgNode(path);
 	}

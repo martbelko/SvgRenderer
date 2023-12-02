@@ -24,8 +24,8 @@
 
 namespace SvgRenderer {
 
-	constexpr uint32_t SCREEN_WIDTH = 1280;
-	constexpr uint32_t SCREEN_HEIGHT = 720;
+	constexpr uint32_t SCREEN_WIDTH = 1900;
+	constexpr uint32_t SCREEN_HEIGHT = 1000;
 
 	Application Application::s_Instance;
 
@@ -48,11 +48,18 @@ namespace SvgRenderer {
 				case SvgPath::Segment::Type::LineTo:
 					cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
 					break;
+				case SvgPath::Segment::Type::Close:
+					cmds.push_back(CloseCmd{});
+					break;
+				case SvgPath::Segment::Type::QuadTo:
+					cmds.push_back(PathCmd(QuadToCmd{ .p1 = seg.as.quadTo.p1, .p2 = seg.as.quadTo.p2 }));
+					break;
+				case SvgPath::Segment::Type::CubicTo:
+					cmds.push_back(PathCmd(CubicToCmd{ .p1 = seg.as.cubicTo.p1, .p2 = seg.as.cubicTo.p2, .p3 = seg.as.cubicTo.p3 }));
+					break;
 				// TODO: Implement others
 				}
 			}
-
-			cmds.push_back(CloseCmd{});
 
 			const SvgColor& c = path.fill.color;
 			builder.color = { c.r, c.g, c.r, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
@@ -89,7 +96,7 @@ namespace SvgRenderer {
 
 		Renderer::Init(initWidth, initHeight);
 
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/test2.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/Tiger.svg");
 
 		Render(root, m_TileBuilder);
 	}

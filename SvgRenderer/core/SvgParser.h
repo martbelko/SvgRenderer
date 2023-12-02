@@ -95,11 +95,15 @@ namespace SvgRenderer {
 			glm::vec2 p3;
 		};
 
+		struct Close
+		{
+		};
+
 		struct Segment
 		{
 			enum class Type
 			{
-				MoveTo = 0, LineTo, QuadTo, CubicTo
+				MoveTo = 0, LineTo, QuadTo, CubicTo, Close
 			};
 
 			Type type;
@@ -109,6 +113,7 @@ namespace SvgRenderer {
 				LineTo lineTo;
 				QuadTo quadTo;
 				CubicTo cubicTo;
+				Close close;
 			} as;
 
 			Segment(const MoveTo& moveTo)
@@ -119,6 +124,8 @@ namespace SvgRenderer {
 				: type(Type::QuadTo), as(SegmentUnion{ .quadTo = quadTo }) {}
 			Segment(const CubicTo& cubicTo)
 				: type(Type::CubicTo), as(SegmentUnion{ .cubicTo = cubicTo }) {}
+			Segment(const Close& close)
+				: type(Type::Close), as(SegmentUnion{ .close = close }) {}
 
 			~Segment()
 			{

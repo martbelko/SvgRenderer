@@ -15,10 +15,12 @@ namespace SvgRenderer {
 
 	void Rasterizer::MoveTo(const glm::vec2& point)
 	{
+		//std::cout << "MoveTo: " << point.x << ";" << point.y << '\n';
 		if (last != first)
 		{
 			LineTo(first);
 		}
+
 
 		first = point;
 		last = point;
@@ -27,6 +29,8 @@ namespace SvgRenderer {
 
 	void Rasterizer::LineTo(const glm::vec2& point)
 	{
+		//std::cout << "LineTo: " << point.x << ";" << point.y << '\n';
+
 		if (point != last)
 		{
 			int16_t xDir = sign(point.x - last.x);
