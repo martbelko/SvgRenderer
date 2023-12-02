@@ -17,6 +17,11 @@ namespace SvgRenderer {
 		float height;
 	};
 
+	struct Tile
+	{
+		int32_t winding = 0;
+	};
+
 	struct TileIncrement
 	{
 		int16_t tileX;
@@ -27,8 +32,24 @@ namespace SvgRenderer {
 	class Rasterizer
 	{
 	public:
+		Rasterizer(uint32_t windowWidth, uint32_t windowHeight)
+			: m_Width(windowWidth), m_Height(windowHeight)
+		{
+			m_TileCountX = std::ceil(static_cast<float>(m_Width) / TILE_SIZE);
+			m_TileCountY = std::ceil(static_cast<float>(m_Height) / TILE_SIZE);
+			uint32_t tileCount = m_TileCountX * m_TileCountY;
+
+			tiles.resize(tileCount);
+		}
+
+		Tile& GetTile(int x, int y) { return tiles[y * m_TileCountX + x]; }
+		uint32_t GetTileIndex(int x, int y) const { return y * m_TileCountX + x; }
+
+		uint32_t m_Width, m_Height;
+		uint32_t m_TileCountX, m_TileCountY;
+
 		std::vector<Increment> increments;
-		std::vector<TileIncrement> tileIncrements;
+		std::vector<Tile> tiles;
 		glm::vec2 first = { 0.0f, 0.0f };
 		glm::vec2 last = { 0.0f, 0.0f };
 		int16_t prevTileY = 0;

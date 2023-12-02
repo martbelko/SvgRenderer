@@ -64,7 +64,7 @@ namespace SvgRenderer {
 			const SvgColor& c = path.fill.color;
 			builder.color = { c.r, c.g, c.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
 
-			Rasterizer rast;
+			Rasterizer rast(SCREEN_WIDTH, SCREEN_HEIGHT);
 			rast.Fill(cmds, path.transform);
 			rast.Finish(builder);
 
@@ -113,12 +113,12 @@ namespace SvgRenderer {
 
 	void Application::Run()
 	{
-		Rasterizer rasterizer;
-		std::vector<PathCmd> path;
-		path.push_back(MoveToCmd({ 400, 300 }));
-		path.push_back(QuadToCmd({ 500, 200 }, { 400, 100 }));
-		path.push_back(CubicToCmd({ 350, 150 }, { 100, 250 }, { 400, 300 }));
-		path.push_back(CloseCmd{});
+		//Rasterizer rasterizer;
+		//std::vector<PathCmd> path;
+		//path.push_back(MoveToCmd({ 400, 300 }));
+		//path.push_back(QuadToCmd({ 500, 200 }, { 400, 100 }));
+		//path.push_back(CubicToCmd({ 350, 150 }, { 100, 250 }, { 400, 300 }));
+		//path.push_back(CloseCmd{});
 
 		//glm::mat3 s = glm::scale(glm::mat4(1.0f), { 2, 2, 2 });
 		//rasterizer.Fill(path, s);

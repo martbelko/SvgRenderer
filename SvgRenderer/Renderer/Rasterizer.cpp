@@ -110,12 +110,13 @@ namespace SvgRenderer {
 				if (tileY != prevTileY)
 				{
 					int16_t v1 = x / TILE_SIZE; // Find out which tile index on x-axis are we on
-					int8_t v2 = tileY - prevTileY; // Are we moving from top to bottom, or bottom to top? (1 = from lower tile to higher tile, 0 = opposite)
-					tileIncrements.push_back(TileIncrement{
-						.tileX = v1, // Set the x-axis tile index
-						.tileY = v2 == 1 ? prevTileY : tileY, // This is the same as std::min(prevTileY, tileY)
-						.sign = v2 // Set the sign correctly, so we know which tile was previous one
-					});
+					int8_t v2 = tileY - prevTileY; // Are we moving from top to bottom, or bottom to top? (1 = from lower tile to higher tile, -1 = opposite)
+					uint32_t currentTileY = v2 == 1 ? prevTileY : tileY;
+
+					uint32_t currentIndex = GetTileIndex(v1, currentTileY);
+
+					GetTile(v1, currentTileY).winding += v2;
+
 					prevTileY = tileY;
 				}
 
@@ -169,17 +170,21 @@ namespace SvgRenderer {
 
 		// Increments may be in any order
 
+		std::sort(increments.begin(), increments.end(), [](const Increment& inc1, const Increment& inc2)
+		{
+			const int16_t tile1X = inc1.x / TILE_SIZE;
+			const int16_t tile1Y = inc1.y / TILE_SIZE;
+			const int16_t tile2X = inc2.x / TILE_SIZE;
+			const int16_t tile2Y = inc2.y / TILE_SIZE;
+			return std::tie(tile1Y, tile1X) < std::tie(tile2Y, tile2X);
+		});
+
 		struct Bin
 		{
 			int16_t tileX;
 			int16_t tileY;
 			size_t start;
 			size_t end;
-
-			bool operator<(const Bin& other) const
-			{
-				return std::tie(tileY, tileX) < std::tie(other.tileY, other.tileX);
-			}
 		};
 
 		std::vector<Bin> bins;
@@ -192,8 +197,8 @@ namespace SvgRenderer {
 
 		if (!increments.empty())
 		{
-			bin.tileX = (int16_t)first.x / TILE_SIZE;
-			bin.tileY = (int16_t)first.y / TILE_SIZE;
+			bin.tileX = (int16_t)increments[0].x / TILE_SIZE;
+			bin.tileY = (int16_t)increments[0].y / TILE_SIZE;
 		}
 
 		for (size_t i = 0; i < increments.size(); ++i)
@@ -204,6 +209,7 @@ namespace SvgRenderer {
 			if (tileX != bin.tileX || tileY != bin.tileY)
 			{
 				bins.push_back(std::move(bin));
+
 				bin = Bin{
 					.tileX = tileX,
 					.tileY = tileY,
@@ -217,44 +223,20 @@ namespace SvgRenderer {
 
 		bins.push_back(std::move(bin));
 
-		std::sort(bins.begin(), bins.end(), [](const Bin& bin1, const Bin& bin2)
-		{
-			return std::tie(bin1.tileY, bin1.tileX) < std::tie(bin2.tileY, bin2.tileX);
-		});
-
-		std::sort(tileIncrements.begin(), tileIncrements.end(), [](const TileIncrement& inc1, const TileIncrement& inc2)
-		{
-			return std::tie(inc1.tileY, inc1.tileX) < std::tie(inc2.tileY, inc2.tileX);
-		});
-
-		size_t tileIncrementsIndex = 0;
 		int32_t winding = 0;
 
 		for (size_t i = 0; i < bins.size(); ++i)
 		{
 			const Bin& bin = bins[i];
-			if (i + 1 == bins.size() || bins[i + 1].tileX != bin.tileX || bins[i + 1].tileY != bin.tileY)
+			winding += GetTile(bin.tileX, bin.tileY).winding;
+
+			if (i + 1 < bins.size() && bins[i + 1].tileY == bin.tileY && bins[i + 1].tileX > bin.tileX + 1)
 			{
-				if (i + 1 < bins.size() && bins[i + 1].tileY == bin.tileY && bins[i + 1].tileX > bin.tileX + 1)
+				// If the winding is nonzero, span the whole tile
+				if (winding != 0)
 				{
-					while (tileIncrementsIndex < tileIncrements.size())
-					{
-						const TileIncrement& tileIncrement = tileIncrements[tileIncrementsIndex];
-						if (std::tie(tileIncrement.tileY, tileIncrement.tileX) > std::tie(bin.tileY, bin.tileX))
-						{
-							break;
-						}
-
-						winding += tileIncrement.sign; // Accumulate winding according to the sign
-						++tileIncrementsIndex; // Increase the index for tile_increments buffer
-					}
-
-					// If the winding is nonzero, span the whole tile
-					if (winding != 0)
-					{
-						int16_t width = bins[i + 1].tileX - bin.tileX - 1;
-						builder.Span((bin.tileX + 1) * TILE_SIZE, bin.tileY * TILE_SIZE, width * TILE_SIZE);
-					}
+					int16_t width = bins[i + 1].tileX - bin.tileX - 1;
+					builder.Span((bin.tileX + 1) * TILE_SIZE, bin.tileY * TILE_SIZE, width * TILE_SIZE);
 				}
 			}
 		}
