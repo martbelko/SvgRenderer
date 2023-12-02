@@ -62,7 +62,7 @@ namespace SvgRenderer {
 			}
 
 			const SvgColor& c = path.fill.color;
-			builder.color = { c.r, c.g, c.r, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
+			builder.color = { c.r, c.g, c.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
 
 			Rasterizer rast;
 			rast.Fill(cmds, path.transform);
@@ -96,7 +96,7 @@ namespace SvgRenderer {
 
 		Renderer::Init(initWidth, initHeight);
 
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/Tiger.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/tigerr.svg");
 
 		Render(root, m_TileBuilder);
 	}

@@ -34,7 +34,7 @@ namespace SvgRenderer {
 			if (index == std::string_view::npos)
 				break;
 
-			str = str.substr(index + 1, std::string_view::npos);
+			str = str.substr(index, std::string_view::npos);
 			size_t nextIndex = str.find_first_of(nums);
 			if (nextIndex == std::string_view::npos)
 				break;
@@ -89,34 +89,46 @@ namespace SvgRenderer {
 			return {};
 
 		if (colorStr == "none" || colorStr == "transparent")
-		{
 			return {};
-		}
 
 		if (colorStr[0] == '#' && colorStr.size() == 4) // #ABC
 		{
-			uint8_t r, g, b;
+			uint32_t r, g, b;
+
 			std::stringstream ss;
-			ss << std::hex << colorStr[1] << colorStr[1] << colorStr[2] << colorStr[2] << colorStr[3] << colorStr[3];
-			ss >> std::setw(2) >> r >> std::setw(2) >> g >> std::setw(2) >> b;
+			ss << std::hex << colorStr[1] << colorStr[1];
+			ss >> r;
+			ss.clear();
+			ss << colorStr[2] << colorStr[2];
+			ss >> g;
+			ss.clear();
+			ss << colorStr[3] << colorStr[3];
+			ss >> b;
 
 			return SvgColor{
-				.r = r,
-				.g = g,
-				.b = b
+				.r = static_cast<uint8_t>(r),
+				.g = static_cast<uint8_t>(g),
+				.b = static_cast<uint8_t>(b)
 			};
 		}
 		else if (colorStr[0] == '#' && colorStr.size() == 7) // #ABCDEF
 		{
-			uint8_t r, g, b;
+			uint32_t r, g, b;
+
 			std::stringstream ss;
-			ss << std::hex << colorStr.substr(1);
-			ss >> std::setw(2) >> r >> std::setw(2) >> g >> std::setw(2) >> b;
+			ss << std::hex << colorStr[1] << colorStr[2];
+			ss >> r;
+			ss.clear();
+			ss << colorStr[3] << colorStr[4];
+			ss >> g;
+			ss.clear();
+			ss << colorStr[5] << colorStr[6];
+			ss >> b;
 
 			return SvgColor{
-				.r = r,
-				.g = g,
-				.b = b
+				.r = static_cast<uint8_t>(r),
+				.g = static_cast<uint8_t>(g),
+				.b = static_cast<uint8_t>(b)
 			};
 		}
 

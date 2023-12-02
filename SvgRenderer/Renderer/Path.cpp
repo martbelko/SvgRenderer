@@ -8,9 +8,8 @@ namespace SvgRenderer {
 
 	static glm::vec2 ApplyTransform(const glm::mat3& transform, const glm::vec2& point)
 	{
-		glm::vec2 res;
-		res = glm::mat2(transform) * glm::vec3(point, 0.0f) + glm::vec2(324.90716f, 255.00942f);
-		SR_TRACE("Transform ({0};{1}) into ({2};{3})", point.x, point.y, res.x, res.y);
+		glm::vec2 res = transform * glm::vec3(point, 1.0f);
+		//SR_TRACE("Transform ({0};{1}) into ({2};{3})", point.x, point.y, res.x, res.y);
 		return res;
 	}
 
