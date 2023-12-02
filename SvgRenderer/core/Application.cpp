@@ -96,7 +96,9 @@ namespace SvgRenderer {
 
 		Renderer::Init(initWidth, initHeight);
 
+		SR_TRACE("Parsing start");
 		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/tigerr.svg");
+		SR_TRACE("Parsing finish");
 
 		Render(root, m_TileBuilder);
 	}

@@ -13,15 +13,27 @@ namespace SvgRenderer {
 		const char* nums = "0123456789.-";
 		str = str.substr(str.find_first_of(str), std::string_view::npos);
 
+		int ctr = 0;
+
 		while (!str.empty())
 		{
+			if (ctr == 32)
+			{
+				int x = 6;
+			}
+
+			++ctr;
 			float sign = str[0] == '-' ? -1.0f : 1.0f;
 			if (sign < 1.0f)
 			{
 				str = str.substr(1, std::string_view::npos);
 			}
 
-			size_t index = str.find_first_not_of("0123456789.");
+			size_t index = str.find_first_not_of("0123456789.e");
+			if (index != std::string_view::npos && str[index - 1] == 'e')
+			{
+				index = str.find_first_not_of("0123456789.-e", index);
+			}
 
 			float value;
 			std::string_view numStr = str.substr(0, index);
@@ -47,16 +59,18 @@ namespace SvgRenderer {
 	{
 		const char* nums = "0123456789.-";
 
-		str = str.substr(str.find_first_of(str), std::string_view::npos);
+		str = str.substr(str.find_first_of(untilOneOf), std::string_view::npos);
 
 		while (!str.empty())
 		{
 			std::pair<char, std::vector<float>> result = std::make_pair(str[0], std::vector<float>());
+
 			str = str.substr(1, std::string_view::npos);
+
 			size_t index = str.find_first_of(untilOneOf);
 			if (index == std::string_view::npos)
 			{
-				if (str.find_first_of(nums) == std::string::npos)
+				if (str.find_first_of(nums) == std::string_view::npos)
 				{
 					co_yield result;
 					break;
@@ -68,10 +82,14 @@ namespace SvgRenderer {
 			}
 
 			std::string_view lineStr = str.substr(0, index);
-			lineStr = lineStr.substr(lineStr.find_first_of(nums), std::string_view::npos);
 
-			for (float value : ParseNumbersLine(lineStr))
-				result.second.push_back(value);
+			size_t numsIndex = lineStr.find_first_of(nums);
+			if (numsIndex != std::string_view::npos)
+			{
+				lineStr = lineStr.substr(numsIndex, std::string_view::npos);
+				for (float value : ParseNumbersLine(lineStr))
+					result.second.push_back(value);
+			}
 
 			co_yield result;
 
@@ -186,7 +204,13 @@ namespace SvgRenderer {
 			case 'M':
 				if (nums.size() % 2 == 0)
 				{
-					for (size_t i = 0; i < nums.size(); i += 2)
+					{
+						glm::vec2 point = { nums[0], nums[1] };
+						segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
+						prevPoint = point;
+					}
+
+					for (size_t i = 2; i < nums.size(); i += 2)
 					{
 						glm::vec2 point = { nums[i], nums[i + 1] };
 						segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
@@ -197,12 +221,18 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 'M' in path");
 				break;
 			case 'm':
-				if (nums.size() % 2 == 0)
+				if (!nums.empty() && nums.size() % 2 == 0)
 				{
-					for (size_t i = 0; i < nums.size(); i += 2)
+					{
+						glm::vec2 point = prevPoint + glm::vec2(nums[0], nums[0 + 1]);
+						segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
+						prevPoint = point;
+					}
+
+					for (size_t i = 2; i < nums.size(); i += 2)
 					{
 						glm::vec2 point = prevPoint + glm::vec2(nums[i], nums[i + 1]);
-						segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
+						segments.push_back(SvgPath::Segment(SvgPath::LineTo{ .p = point }));
 						prevPoint = point;
 					}
 				}
