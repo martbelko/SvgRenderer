@@ -11,8 +11,8 @@ namespace SvgRenderer {
 
 	struct Increment
 	{
-		int16_t x;
-		int16_t y;
+		int32_t x;
+		int32_t y;
 		float area;
 		float height;
 	};
@@ -22,11 +22,12 @@ namespace SvgRenderer {
 		int32_t winding = 0;
 	};
 
-	struct TileIncrement
+	struct Bin
 	{
-		int16_t tileX;
-		int16_t tileY;
-		int8_t sign;
+		const int32_t tileX;
+		const int32_t tileY;
+		size_t start;
+		size_t end;
 	};
 
 	class Rasterizer
@@ -40,9 +41,25 @@ namespace SvgRenderer {
 			uint32_t tileCount = m_TileCountX * m_TileCountY;
 
 			tiles.resize(tileCount);
+
+			bins.reserve(tileCount);
+			for (int32_t y = 0; y < m_TileCountY; ++y)
+			{
+				for (int32_t x = 0; x < m_TileCountX; ++x)
+				{
+					bins.push_back(Bin{
+						.tileX = x,
+						.tileY = y,
+						.start = 0,
+						.end = 0
+					});
+				}
+			}
 		}
 
 		Tile& GetTile(int x, int y) { return tiles[y * m_TileCountX + x]; }
+		Bin& GetBin(int x, int y) { return bins[y * m_TileCountX + x]; }
+
 		size_t GetTileIndex(int x, int y) const { return y * m_TileCountX + x; }
 
 		uint32_t m_Width, m_Height;
@@ -50,6 +67,8 @@ namespace SvgRenderer {
 
 		std::vector<Increment> increments;
 		std::vector<Tile> tiles;
+		std::vector<Bin> bins;
+
 		glm::vec2 first = { 0.0f, 0.0f };
 		glm::vec2 last = { 0.0f, 0.0f };
 		int16_t prevTileY = 0;

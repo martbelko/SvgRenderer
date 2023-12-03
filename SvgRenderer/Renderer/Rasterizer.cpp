@@ -29,12 +29,12 @@ namespace SvgRenderer {
 	{
 		if (point != last)
 		{
-			int16_t xDir = sign(point.x - last.x);
-			int16_t yDir = sign(point.y - last.y);
+			int32_t xDir = sign(point.x - last.x);
+			int32_t yDir = sign(point.y - last.y);
 			float dtdx = 1.0f / (point.x - last.x);
 			float dtdy = 1.0f / (point.y - last.y);
-			int16_t x = last.x; // Convert to int
-			int16_t y = last.y; // Convert to int
+			int32_t x = last.x; // Convert to int
+			int32_t y = last.y; // Convert to int
 			float rowt0 = 0.0f;
 			float colt0 = 0.0f;
 
@@ -102,20 +102,17 @@ namespace SvgRenderer {
 				}
 
 				// Handle tile boundaries
-				int16_t tileY = y / TILE_SIZE;
+				int32_t tileY = y / TILE_SIZE;
 				if (tileY != prevTileY)
 				{
-					int16_t v1 = x / TILE_SIZE; // Find out which tile index on x-axis are we on
+					int32_t v1 = x / TILE_SIZE; // Find out which tile index on x-axis are we on
 					int8_t v2 = tileY - prevTileY; // Are we moving from top to bottom, or bottom to top? (1 = from lower tile to higher tile, -1 = opposite)
 					uint32_t currentTileY = v2 == 1 ? prevTileY : tileY;
 
-					uint32_t currentIndex = std::min(GetTileIndex(v1, currentTileY), tiles.size() - 1);
+					size_t currentIndex = std::max(std::min(GetTileIndex(v1, currentTileY), tiles.size() - 1), static_cast<size_t>(0));
 
 					for (size_t i = 0; i < currentIndex; ++i)
 						tiles[i].winding += v2;
-
-					//if (v1 < m_TileCountX && currentTileY < m_TileCountY)
-					//	GetTile(v1, currentTileY).winding += v2;
 
 					prevTileY = tileY;
 				}
@@ -179,65 +176,49 @@ namespace SvgRenderer {
 			return std::tie(tile1Y, tile1X) < std::tie(tile2Y, tile2X);
 		});
 
-		struct Bin
-		{
-			int32_t tileX;
-			int32_t tileY;
-			size_t start;
-			size_t end;
-		};
-
-		std::vector<Bin> bins;
-		Bin bin = Bin{
-			.tileX = 0,
-			.tileY = 0,
-			.start = 0,
-			.end = 0
-		};
-
+		Bin* currentBin = &GetBin(0, 0);
 		if (!increments.empty())
-		{
-			bin.tileX = (int32_t)increments[0].x / TILE_SIZE;
-			bin.tileY = (int32_t)increments[0].y / TILE_SIZE;
-		}
+			currentBin = &GetBin(increments[0].x / TILE_SIZE, increments[0].y / TILE_SIZE);
 
 		for (size_t i = 0; i < increments.size(); ++i)
 		{
 			const Increment& increment = increments[i];
 			const int32_t tileX = increment.x / TILE_SIZE;
 			const int32_t tileY = increment.y / TILE_SIZE;
-			if (tileX != bin.tileX || tileY != bin.tileY)
-			{
-				bins.push_back(std::move(bin));
 
-				bin = Bin{
-					.tileX = tileX,
-					.tileY = tileY,
-					.start = i,
-					.end = i
-				};
+			if (tileX != currentBin->tileX || tileY != currentBin->tileY)
+			{
+				// TODO: Check if tile indices are in valid range
+				currentBin = &GetBin(tileX, tileY);
+				currentBin->start = i;
+				currentBin->end = i;
 			}
 
-			++bin.end;
+			++(currentBin->end);
 		}
 
-		bins.push_back(std::move(bin));
+		auto filterBins = [&]()
+			{
+				std::vector<Bin> result;
+				for (const Bin& bin : bins)
+				{
+					if (bin.end != bin.start)
+						result.push_back(bin);
+				}
 
-		int32_t winding = 0;
+				return result;
+			};
 
-		for (size_t i = 0; i < bins.size(); ++i)
+		for (size_t i = 0; i < bins.size(); i++)
 		{
 			const Bin& bin = bins[i];
-
-			//if (bin.tileX < m_TileCountX && bin.tileY < m_TileCountY)
-			//	winding += GetTile(bin.tileX, bin.tileY).winding;
-
-			winding = GetTile(bin.tileX, bin.tileY).winding;
+			if (bin.start == bin.end)
+				continue;
 
 			if (i + 1 < bins.size() && bins[i + 1].tileY == bin.tileY)
 			{
 				// If the winding is nonzero, span the whole tile
-				if (winding != 0)
+				if (GetTile(bin.tileX, bin.tileY).winding != 0)
 				{
 					int32_t width = bins[i + 1].tileX - bin.tileX - 1;
 					builder.Span((bin.tileX + 1) * TILE_SIZE, bin.tileY * TILE_SIZE, width * TILE_SIZE);
@@ -253,6 +234,8 @@ namespace SvgRenderer {
 		for (size_t i = 0; i < bins.size(); ++i)
 		{
 			const Bin& bin = bins[i];
+			if (bin.end == bin.start)
+				continue;
 
 			for (size_t i = bin.start; i < bin.end; ++i)
 			{
@@ -285,7 +268,7 @@ namespace SvgRenderer {
 					next[y] = accum; // This accum is what he calls cover table
 				}
 
-				builder.Tile(bin.tileX * TILE_SIZE, bin.tileY * TILE_SIZE, tile);
+				//builder.Tile(bin.tileX * TILE_SIZE, bin.tileY * TILE_SIZE, tile);
 
 				std::fill(areas.begin(), areas.end(), 0.0f);
 				std::fill(heights.begin(), heights.end(), 0.0f);
