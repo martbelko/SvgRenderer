@@ -8,50 +8,120 @@ namespace SvgRenderer {
 
 	using namespace tinyxml2;
 
+	static std::string_view ExtractFirstNumberString(std::string_view str)
+	{
+		if (str.empty())
+			return str;
+
+		bool readMinus = false;
+		bool readDot = false;
+		bool readExp = false;
+
+		size_t i = 0;
+		for (; i < str.length(); i++)
+		{
+			switch (str[i])
+			{
+			case '-':
+				if (readMinus)
+				{
+					if (str[i - 1] != 'e')
+						goto end;
+				}
+				else if (i != 0)
+				{
+					if (str[i - 1] != 'e')
+						goto end;
+				}
+
+				readMinus = true;
+				break;
+			case '.':
+				if (readDot)
+					goto end;
+				readDot = true;
+				break;
+			case 'e':
+				if (readExp)
+					goto end;
+				readExp = true;
+				break;
+			default:
+			{
+				if (!std::isdigit(str[i]))
+				{
+					goto end;
+				}
+			}
+			}
+		}
+
+	end:
+		auto ss = str.substr(0, i);
+		return ss;
+	}
+
 	cppcoro::generator<float> SvgParser::ParseNumbersLine(std::string_view str)
 	{
-		const char* nums = "0123456789.-";
-		str = str.substr(str.find_first_of(str), std::string_view::npos);
+		const char* nums = "0123456789.-e";
+		if (str.find("7.266-1.919.113-1.045.249-1.152.273-.802.341-.62.62-.756.938-.821 1.109-.63 2.554-.713 2.822-.551 1.47-.284 1.596-.058.127.01.947.038.571.235.264.39.069.474-.308.606-.957 1.299-.981 1.284-.841 1.186-.737 1.348-.444 1.318-.273 1.084-.172 1.26-.043 1.069.058 1.367.24 1.427.366 1.665.112.327-.024.444-.191.371-.39.284-.395.097-.625-.107-.758-.205-.63-.24-.156-.01-.376-.126-.278-.157-.294-.337-.067-.2.014-.19.332-.469.113-.089") == 0)
+		{
+			int xx = 6;
+		}
 
 		int ctr = 0;
 
 		while (!str.empty())
 		{
 			if (ctr == 32)
-			{
-				int x = 6;
-			}
-
+				int xx = 6;
 			++ctr;
-			float sign = str[0] == '-' ? -1.0f : 1.0f;
-			if (sign < 1.0f)
-			{
-				str = str.substr(1, std::string_view::npos);
-			}
 
-			size_t index = str.find_first_not_of("0123456789.e");
-			if (index != std::string_view::npos && str[index - 1] == 'e')
-			{
-				index = str.find_first_not_of("0123456789.-e", index);
-			}
+			size_t numIndex = str.find_first_of(nums);
+			if (numIndex == std::string_view::npos)
+				break;
 
-			float value;
-			std::string_view numStr = str.substr(0, index);
+			str = str.substr(numIndex, std::string_view::npos);
+
+			std::string_view numStr = ExtractFirstNumberString(str);
 			std::stringstream ss;
 			ss << numStr;
+			float value;
 			ss >> value;
 
-			co_yield value * sign;
+			co_yield value;
 
-			if (index == std::string_view::npos)
-				break;
+			str = str.substr(numStr.length(), std::string_view::npos);
 
-			str = str.substr(index, std::string_view::npos);
-			size_t nextIndex = str.find_first_of(nums);
-			if (nextIndex == std::string_view::npos)
-				break;
-
-			str = str.substr(nextIndex, std::string_view::npos);
+			//float sign = str[0] == '-' ? -1.0f : 1.0f;
+			//if (sign < 1.0f)
+			//{
+			//	str = str.substr(1, std::string_view::npos);
+			//}
+			//
+			//size_t index = str.find_first_not_of("0123456789.e");
+			//if (index != std::string_view::npos && str[index - 1] == 'e')
+			//{
+			//	index = str.find_first_not_of("0123456789.-e", index);
+			//}
+			//
+			//float value;
+			//std::string_view numStr = str.substr(0, index);
+			//std::stringstream ss;
+			//ss << numStr;
+			//ss >> value;
+			//
+			//co_yield value * sign;
+			//
+			//if (index == std::string_view::npos)
+			//	break;
+			//
+			//str = str.substr(index, std::string_view::npos);
+			//size_t nextIndex = str.find_first_of(nums);
+			//if (nextIndex == std::string_view::npos)
+			//	break;
+			//
+			//str = str.substr(nextIndex, std::string_view::npos);
 		}
 	}
 
@@ -59,10 +129,26 @@ namespace SvgRenderer {
 	{
 		const char* nums = "0123456789.-";
 
+		int ctr = 0;
 		str = str.substr(str.find_first_of(untilOneOf), std::string_view::npos);
 
 		while (!str.empty())
 		{
+			bool pp = false;
+			if (str.find("m7.266-1.919.113-1.045.249-1.152.273-.802.341-.62.62-.756.938-.821 1.109-.63 2.554-.713 2.822-.551 1.47-.284 1.596-.058.127.01.947.038.571.235.264.39.069.474-.308.606-.957 1.299-.981 1.284-.841 1.186-.737 1.348-.444 1.318-.273 1.084-.172 1.26-.043 1.069.058 1.367.24 1.427.366 1.665.112.327-.024.444-.191.371-.39.284-.395.097-.625-.107-.758-.205-.63-.24-.156-.01-.376-.126-.278-.157-.294-.337-.067-.2.014-.19.332-.469.113-.089") == 0)
+			{
+				pp = true;
+			}
+
+			if (pp)
+			{
+				if (ctr == 2)
+				{
+					int xx = 6;
+				}
+				++ctr;
+			}
+
 			std::pair<char, std::vector<float>> result = std::make_pair(str[0], std::vector<float>());
 
 			str = str.substr(1, std::string_view::npos);

@@ -43,7 +43,7 @@ namespace SvgRenderer {
 		}
 
 		Tile& GetTile(int x, int y) { return tiles[y * m_TileCountX + x]; }
-		uint32_t GetTileIndex(int x, int y) const { return y * m_TileCountX + x; }
+		size_t GetTileIndex(int x, int y) const { return y * m_TileCountX + x; }
 
 		uint32_t m_Width, m_Height;
 		uint32_t m_TileCountX, m_TileCountY;

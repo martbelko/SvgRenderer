@@ -16,14 +16,14 @@ namespace SvgRenderer {
 		}
 	}
 
-	void TileBuilder::Tile(int16_t x, int16_t y, const std::array<uint8_t, TILE_SIZE * TILE_SIZE>& data)
+	void TileBuilder::Tile(int32_t x, int32_t y, const std::array<uint8_t, TILE_SIZE * TILE_SIZE>& data)
 	{
 		size_t base = vertices.size();
 
-		uint16_t u1 = nextCol * TILE_SIZE;
-		uint16_t u2 = (nextCol + 1) * TILE_SIZE;
-		uint16_t v1 = nextRow * TILE_SIZE;
-		uint16_t v2 = (nextRow + 1) * TILE_SIZE;
+		uint32_t u1 = nextCol * TILE_SIZE;
+		uint32_t u2 = (nextCol + 1) * TILE_SIZE;
+		uint32_t v1 = nextRow * TILE_SIZE;
+		uint32_t v2 = (nextRow + 1) * TILE_SIZE;
 
 		vertices.push_back(Vertex{
 			.pos = { x, y },
@@ -31,17 +31,17 @@ namespace SvgRenderer {
 			.color = color,
 		});
 		vertices.push_back(Vertex{
-			.pos = { int16_t(x + TILE_SIZE), y },
+			.pos = { int32_t(x + TILE_SIZE), y },
 			.uv = { u2, v1 },
 			.color = color,
 			});
 		vertices.push_back(Vertex{
-			.pos = { int16_t(x + TILE_SIZE), int16_t(y + TILE_SIZE) },
+			.pos = { int32_t(x + TILE_SIZE), int32_t(y + TILE_SIZE) },
 			.uv = { u2, v2 },
 			.color = color,
 			});
 		vertices.push_back(Vertex{
-			.pos = { x, int16_t(y + TILE_SIZE) },
+			.pos = { x, int32_t(y + TILE_SIZE) },
 			.uv = { u1, v2 },
 			.color = color,
 			});
@@ -73,7 +73,7 @@ namespace SvgRenderer {
 		}
 	}
 
-	void TileBuilder::Span(int16_t x, int16_t y, uint16_t width)
+	void TileBuilder::Span(int32_t x, int32_t y, uint32_t width)
 	{
 		size_t base = vertices.size();
 
@@ -83,17 +83,17 @@ namespace SvgRenderer {
 			.color = color,
 		});
 		vertices.push_back(Vertex{
-			.pos = { int16_t(x + width), y },
+			.pos = { int32_t(x + width), y },
 			.uv = { 0, 0 },
 			.color = color,
 		});
 		vertices.push_back(Vertex{
-			.pos = { int16_t(x + width), int16_t(y + TILE_SIZE) } ,
+			.pos = { int32_t(x + width), int32_t(y + TILE_SIZE) } ,
 			.uv = { 0, 0 },
 			.color = color,
 		});
 		vertices.push_back(Vertex{
-			.pos = { x, int16_t(y + TILE_SIZE) },
+			.pos = { x, int32_t(y + TILE_SIZE) },
 			.uv = { 0, 0 },
 			.color = color,
 		});

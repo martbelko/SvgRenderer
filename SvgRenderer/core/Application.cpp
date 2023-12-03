@@ -113,17 +113,6 @@ namespace SvgRenderer {
 
 	void Application::Run()
 	{
-		//Rasterizer rasterizer;
-		//std::vector<PathCmd> path;
-		//path.push_back(MoveToCmd({ 400, 300 }));
-		//path.push_back(QuadToCmd({ 500, 200 }, { 400, 100 }));
-		//path.push_back(CubicToCmd({ 350, 150 }, { 100, 250 }, { 400, 300 }));
-		//path.push_back(CloseCmd{});
-
-		//glm::mat3 s = glm::scale(glm::mat4(1.0f), { 2, 2, 2 });
-		//rasterizer.Fill(path, s);
-		//rasterizer.Finish(m_TileBuilder);
-
 		Ref<Shader> shader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
 
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -170,7 +159,7 @@ namespace SvgRenderer {
 		glVertexAttribPointer(
 			0,
 			2,
-			GL_SHORT,
+			GL_INT,
 			GL_FALSE,
 			sizeof(Vertex),
 			(const void*)0
@@ -180,10 +169,10 @@ namespace SvgRenderer {
 		glVertexAttribPointer(
 			1,
 			2,
-			GL_UNSIGNED_SHORT,
+			GL_UNSIGNED_INT,
 			GL_FALSE,
 			sizeof(Vertex),
-			(const void*)4
+			(const void*)8
 			);
 
 		glEnableVertexAttribArray(2);
@@ -193,7 +182,7 @@ namespace SvgRenderer {
 			GL_UNSIGNED_BYTE,
 			GL_TRUE,
 			sizeof(Vertex),
-			(const void*)8
+			(const void*)16
 			);
 
 		shader->Bind();

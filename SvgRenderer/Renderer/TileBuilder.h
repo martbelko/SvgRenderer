@@ -5,13 +5,13 @@
 
 namespace SvgRenderer {
 
-	constexpr uint32_t TILE_SIZE = 8;
-	constexpr uint32_t ATLAS_SIZE = 4096;
+	constexpr uint32_t TILE_SIZE = 16;
+	constexpr uint32_t ATLAS_SIZE = 4096 * 2;
 
 	struct Vertex
 	{
-		std::array<int16_t, 2> pos;
-		std::array<uint16_t, 2> uv;
+		std::array<int32_t, 2> pos;
+		std::array<uint32_t, 2> uv;
 		std::array<uint8_t, 4> color;
 	};
 
@@ -21,14 +21,14 @@ namespace SvgRenderer {
 		std::vector<Vertex> vertices;
 		std::vector<uint32_t> indices;
 		std::vector<uint8_t> atlas;
-		uint16_t nextRow = 0;
-		uint16_t nextCol = 1;
+		uint32_t nextRow = 0;
+		uint32_t nextCol = 1;
 		std::array<uint8_t, 4> color = { 255, 255, 255, 255 };
 
 		TileBuilder();
 
-		void Tile(int16_t x, int16_t y, const std::array<uint8_t, TILE_SIZE * TILE_SIZE>& data);
-		void Span(int16_t x, int16_t y, uint16_t width);
+		void Tile(int32_t x, int32_t y, const std::array<uint8_t, TILE_SIZE * TILE_SIZE>& data);
+		void Span(int32_t x, int32_t y, uint32_t width);
 	};
 
 }

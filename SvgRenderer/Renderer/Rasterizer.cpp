@@ -15,12 +15,10 @@ namespace SvgRenderer {
 
 	void Rasterizer::MoveTo(const glm::vec2& point)
 	{
-		//std::cout << "MoveTo: " << point.x << ";" << point.y << '\n';
 		if (last != first)
 		{
 			LineTo(first);
 		}
-
 
 		first = point;
 		last = point;
@@ -29,8 +27,6 @@ namespace SvgRenderer {
 
 	void Rasterizer::LineTo(const glm::vec2& point)
 	{
-		//std::cout << "LineTo: " << point.x << ";" << point.y << '\n';
-
 		if (point != last)
 		{
 			int16_t xDir = sign(point.x - last.x);
@@ -113,9 +109,13 @@ namespace SvgRenderer {
 					int8_t v2 = tileY - prevTileY; // Are we moving from top to bottom, or bottom to top? (1 = from lower tile to higher tile, -1 = opposite)
 					uint32_t currentTileY = v2 == 1 ? prevTileY : tileY;
 
-					uint32_t currentIndex = GetTileIndex(v1, currentTileY);
+					uint32_t currentIndex = std::min(GetTileIndex(v1, currentTileY), tiles.size() - 1);
 
-					GetTile(v1, currentTileY).winding += v2;
+					for (size_t i = 0; i < currentIndex; ++i)
+						tiles[i].winding += v2;
+
+					//if (v1 < m_TileCountX && currentTileY < m_TileCountY)
+					//	GetTile(v1, currentTileY).winding += v2;
 
 					prevTileY = tileY;
 				}
@@ -172,17 +172,17 @@ namespace SvgRenderer {
 
 		std::sort(increments.begin(), increments.end(), [](const Increment& inc1, const Increment& inc2)
 		{
-			const int16_t tile1X = inc1.x / TILE_SIZE;
-			const int16_t tile1Y = inc1.y / TILE_SIZE;
-			const int16_t tile2X = inc2.x / TILE_SIZE;
-			const int16_t tile2Y = inc2.y / TILE_SIZE;
+			const int32_t tile1X = inc1.x / TILE_SIZE;
+			const int32_t tile1Y = inc1.y / TILE_SIZE;
+			const int32_t tile2X = inc2.x / TILE_SIZE;
+			const int32_t tile2Y = inc2.y / TILE_SIZE;
 			return std::tie(tile1Y, tile1X) < std::tie(tile2Y, tile2X);
 		});
 
 		struct Bin
 		{
-			int16_t tileX;
-			int16_t tileY;
+			int32_t tileX;
+			int32_t tileY;
 			size_t start;
 			size_t end;
 		};
@@ -197,15 +197,15 @@ namespace SvgRenderer {
 
 		if (!increments.empty())
 		{
-			bin.tileX = (int16_t)increments[0].x / TILE_SIZE;
-			bin.tileY = (int16_t)increments[0].y / TILE_SIZE;
+			bin.tileX = (int32_t)increments[0].x / TILE_SIZE;
+			bin.tileY = (int32_t)increments[0].y / TILE_SIZE;
 		}
 
 		for (size_t i = 0; i < increments.size(); ++i)
 		{
 			const Increment& increment = increments[i];
-			const int16_t tileX = increment.x / TILE_SIZE;
-			const int16_t tileY = increment.y / TILE_SIZE;
+			const int32_t tileX = increment.x / TILE_SIZE;
+			const int32_t tileY = increment.y / TILE_SIZE;
 			if (tileX != bin.tileX || tileY != bin.tileY)
 			{
 				bins.push_back(std::move(bin));
@@ -228,14 +228,18 @@ namespace SvgRenderer {
 		for (size_t i = 0; i < bins.size(); ++i)
 		{
 			const Bin& bin = bins[i];
-			winding += GetTile(bin.tileX, bin.tileY).winding;
 
-			if (i + 1 < bins.size() && bins[i + 1].tileY == bin.tileY && bins[i + 1].tileX > bin.tileX + 1)
+			//if (bin.tileX < m_TileCountX && bin.tileY < m_TileCountY)
+			//	winding += GetTile(bin.tileX, bin.tileY).winding;
+
+			winding = GetTile(bin.tileX, bin.tileY).winding;
+
+			if (i + 1 < bins.size() && bins[i + 1].tileY == bin.tileY)
 			{
 				// If the winding is nonzero, span the whole tile
 				if (winding != 0)
 				{
-					int16_t width = bins[i + 1].tileX - bin.tileX - 1;
+					int32_t width = bins[i + 1].tileX - bin.tileX - 1;
 					builder.Span((bin.tileX + 1) * TILE_SIZE, bin.tileY * TILE_SIZE, width * TILE_SIZE);
 				}
 			}
