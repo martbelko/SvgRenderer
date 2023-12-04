@@ -209,18 +209,30 @@ namespace SvgRenderer {
 				return result;
 			};
 
+		//bins = filterBins();
+
 		for (size_t i = 0; i < bins.size(); i++)
 		{
 			const Bin& bin = bins[i];
 			if (bin.start == bin.end)
 				continue;
 
-			if (i + 1 < bins.size() && bins[i + 1].tileY == bin.tileY)
+			Bin* nextBin = nullptr;
+			for (size_t j = i + 1; j < bins.size() && bins[j].tileY == bin.tileY; ++j)
+			{
+				if (bins[j].start != bins[j].end)
+				{
+					nextBin = &bins[j];
+					break;
+				}
+			}
+
+			if (nextBin != nullptr)
 			{
 				// If the winding is nonzero, span the whole tile
 				if (GetTile(bin.tileX, bin.tileY).winding != 0)
 				{
-					int32_t width = bins[i + 1].tileX - bin.tileX - 1;
+					int32_t width = nextBin->tileX - bin.tileX - 1;
 					builder.Span((bin.tileX + 1) * TILE_SIZE, bin.tileY * TILE_SIZE, width * TILE_SIZE);
 				}
 			}
@@ -228,13 +240,15 @@ namespace SvgRenderer {
 
 		std::array<float, TILE_SIZE * TILE_SIZE> areas{};
 		std::array<float, TILE_SIZE * TILE_SIZE> heights{};
-		std::array<float, TILE_SIZE> prev{};
-		std::array<float, TILE_SIZE> next{};
+		std::array<float, TILE_SIZE> coverage{};
+
+		int ctr = 0;
 
 		for (size_t i = 0; i < bins.size(); ++i)
 		{
+			++ctr;
 			const Bin& bin = bins[i];
-			if (bin.end == bin.start)
+			if (bin.end == bin.start && ctr < 7000)
 				continue;
 
 			for (size_t i = bin.start; i < bin.end; ++i)
@@ -247,44 +261,44 @@ namespace SvgRenderer {
 				heights[y * TILE_SIZE + x] += increment.height; // Just simple increment for height
 			}
 
-			// If we are on the end of bins, or the next tile has different position as the current tile
-			// Basically, we are accumulating areas and heights until we are moving to the bin on next position
-			if (i + 1 == bins.size() || bins[i + 1].tileX != bin.tileX || bins[i + 1].tileY != bin.tileY)
+			std::array<uint8_t, TILE_SIZE * TILE_SIZE> tile;
+
+			// For each y-coord in the tile
+			for (uint32_t y = 0; y < TILE_SIZE; ++y)
 			{
-				std::array<uint8_t, TILE_SIZE * TILE_SIZE> tile{};
+				float accum = coverage[y];
 
-				// For each y-coord in the tile
-				for (uint32_t y = 0; y < TILE_SIZE; ++y)
+				// For each x-coord in the tile
+				for (uint32_t x = 0; x < TILE_SIZE; ++x)
 				{
-					float accum = prev[y];
-
-					// For each x-coord in the tile
-					for (uint32_t x = 0; x < TILE_SIZE; ++x)
-					{
-						tile[y * TILE_SIZE + x] = glm::min(glm::abs(accum + areas[y * TILE_SIZE + x]) * 256.0f, 255.0f);
-						accum += heights[y * TILE_SIZE + x];
-					}
-
-					next[y] = accum; // This accum is what he calls cover table
+					tile[y * TILE_SIZE + x] = glm::min(glm::abs(accum + areas[y * TILE_SIZE + x]) * 256.0f, 255.0f);
+					accum += heights[y * TILE_SIZE + x];
 				}
 
-				//builder.Tile(bin.tileX * TILE_SIZE, bin.tileY * TILE_SIZE, tile);
-
-				std::fill(areas.begin(), areas.end(), 0.0f);
-				std::fill(heights.begin(), heights.end(), 0.0f);
-
-				// If this is not the last tile, and the next one is on the same y-coord
-				if (i + 1 < bins.size() && bins[i + 1].tileY == bin.tileY)
-				{
-					prev = next;
-				}
-				else
-				{
-					std::fill(prev.begin(), prev.end(), 0.0f);
-				}
-
-				std::fill(next.begin(), next.end(), 0.0f);
+				coverage[y] = accum; // This accum is what he calls cover table
 			}
+
+			builder.Tile(bin.tileX * TILE_SIZE, bin.tileY * TILE_SIZE, tile);
+
+			std::fill(areas.begin(), areas.end(), 0.0f);
+			std::fill(heights.begin(), heights.end(), 0.0f);
+
+			Bin* nextBin = nullptr; // Next active bin in the same y-coord, same as the previous one, could be optimized and only done once
+			for (size_t j = i + 1; j < bins.size() && bins[j].tileY == bin.tileY; ++j)
+			{
+				if (bins[j].start != bins[j].end)
+				{
+					nextBin = &bins[j];
+					break;
+				}
+			}
+
+			if (nextBin == nullptr)
+			{
+				std::fill(coverage.begin(), coverage.end(), 0.0f);
+			}
+			else
+				int xx = 6;
 		}
 	}
 
