@@ -275,7 +275,7 @@ namespace SvgRenderer {
 					accum += heights[y * TILE_SIZE + x];
 				}
 
-				coverage[y] = accum; // This accum is what he calls cover table
+				coverage[y] = accum;
 			}
 
 			builder.Tile(bin.tileX * TILE_SIZE, bin.tileY * TILE_SIZE, tile);
@@ -298,7 +298,9 @@ namespace SvgRenderer {
 				std::fill(coverage.begin(), coverage.end(), 0.0f);
 			}
 			else
-				int xx = 6;
+			{
+
+			}
 		}
 	}
 

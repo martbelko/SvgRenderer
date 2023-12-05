@@ -5,7 +5,7 @@
 
 namespace SvgRenderer {
 
-	constexpr uint32_t TILE_SIZE = 16;
+	constexpr uint32_t TILE_SIZE = 8;
 	constexpr uint32_t ATLAS_SIZE = 4096 * 2;
 
 	struct Vertex

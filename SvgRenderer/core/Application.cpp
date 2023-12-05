@@ -27,7 +27,31 @@ namespace SvgRenderer {
 	constexpr uint32_t SCREEN_WIDTH = 1900;
 	constexpr uint32_t SCREEN_HEIGHT = 1000;
 
+	uint32_t g_PathIndex = 0;
+
 	Application Application::s_Instance;
+
+	struct PathRender
+	{
+		uint32_t index;
+		glm::vec4 color;
+		glm::mat4 transform;
+	};
+
+	struct PathRenderCmd
+	{
+		PathCmd cmd;
+		uint32_t pathIndex;
+	};
+
+	struct PathsContainer
+	{
+		std::vector<PathRender> paths;
+		std::vector<PathRenderCmd> commands;
+	};
+
+	PathsContainer g_AllPaths;
+	PathsContainer g_AllCommands;
 
 	static void Render(const SvgNode* node, TileBuilder& builder)
 	{
@@ -64,10 +88,27 @@ namespace SvgRenderer {
 			const SvgColor& c = path.fill.color;
 			builder.color = { c.r, c.g, c.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
 
+			glm::vec4 normColor = { c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, path.fill.opacity };
+
+			g_AllPaths.paths.push_back(PathRender{
+				.index = g_PathIndex,
+				.color = normColor,
+				.transform = path.transform
+			});
+
+			for (const PathCmd& cmd : cmds)
+			{
+				g_AllPaths.commands.push_back(PathRenderCmd{
+					.cmd = cmd,
+					.pathIndex = g_PathIndex
+				});
+			}
+
 			Rasterizer rast(SCREEN_WIDTH, SCREEN_HEIGHT);
 			rast.Fill(cmds, path.transform);
 			rast.Finish(builder);
 
+			++g_PathIndex;
 			break;
 		}
 		}
@@ -97,7 +138,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/tigerr.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/test.svg");
 		SR_TRACE("Parsing finish");
 
 		Render(root, m_TileBuilder);

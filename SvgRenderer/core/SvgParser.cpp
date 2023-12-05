@@ -203,10 +203,10 @@ namespace SvgRenderer {
 			ss << std::hex << colorStr[1] << colorStr[1];
 			ss >> r;
 			ss.clear();
-			ss << colorStr[2] << colorStr[2];
+			ss << std::hex << colorStr[2] << colorStr[2];
 			ss >> g;
 			ss.clear();
-			ss << colorStr[3] << colorStr[3];
+			ss << std::hex << colorStr[3] << colorStr[3];
 			ss >> b;
 
 			return SvgColor{
@@ -223,10 +223,10 @@ namespace SvgRenderer {
 			ss << std::hex << colorStr[1] << colorStr[2];
 			ss >> r;
 			ss.clear();
-			ss << colorStr[3] << colorStr[4];
+			ss << std::hex << colorStr[3] << colorStr[4];
 			ss >> g;
 			ss.clear();
-			ss << colorStr[5] << colorStr[6];
+			ss << std::hex << colorStr[5] << colorStr[6];
 			ss >> b;
 
 			return SvgColor{
@@ -747,12 +747,12 @@ namespace SvgRenderer {
 		if (flags.none() && path.segments.empty())
 			return nullptr;
 
-		path.fill.color = flags.test(Flag::Fill) ? group.fill.color : group.fill.color;
-		path.fill.opacity = flags.test(Flag::FillOpacity) ? group.fill.opacity : group.fill.opacity;
-		path.fill.fillRule = flags.test(Flag::FillRule) ? group.fill.fillRule : group.fill.fillRule;
+		path.fill.color = flags.test(Flag::Fill) ? path.fill.color : group.fill.color;
+		path.fill.opacity = flags.test(Flag::FillOpacity) ? path.fill.opacity : group.fill.opacity;
+		path.fill.fillRule = flags.test(Flag::FillRule) ? path.fill.fillRule : group.fill.fillRule;
 
-		path.stroke.color = flags.test(Flag::Stroke) ? group.stroke.color : group.stroke.color;
-		path.stroke.opacity = flags.test(Flag::StrokeOpacity) ? group.stroke.opacity : group.stroke.opacity;
+		path.stroke.color = flags.test(Flag::Stroke) ? path.stroke.color : group.stroke.color;
+		path.stroke.opacity = flags.test(Flag::StrokeOpacity) ? path.stroke.opacity : group.stroke.opacity;
 
 		path.transform = flags.test(Flag::Transform) ? path.transform * group.transform : group.transform;
 		if (path.transform[0][0] > 1000.0f)
