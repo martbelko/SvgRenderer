@@ -145,17 +145,17 @@ namespace SvgRenderer {
 		});
 	}
 
-	void Rasterizer::Fill(const std::vector<PathCmd>& path, const glm::mat3& transform)
+	void Rasterizer::Fill(const std::vector<PathCmd>& path)
 	{
 		for (const PathCmd& cmd : path)
 		{
-			Command(cmd.Transform(transform));
+			Command(cmd);
 		}
 	}
 
 	void Rasterizer::Stroke(const std::vector<PathCmd>& path, float width, const glm::mat3& transform)
 	{
-		Fill(PathStroke(PathFlatten(path, TOLERANCE), width), transform);
+		//Fill(PathStroke(PathFlatten(path, TOLERANCE), width), transform);
 	}
 
 	void Rasterizer::Finish(TileBuilder& builder)
