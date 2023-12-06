@@ -288,7 +288,7 @@ namespace SvgRenderer {
 			switch (token)
 			{
 			case 'M':
-				if (nums.size() % 2 == 0)
+				if (!nums.empty() && nums.size() % 2 == 0)
 				{
 					{
 						glm::vec2 point = { nums[0], nums[1] };
@@ -326,7 +326,7 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 'm' in path");
 				break;
 			case 'L':
-				if (nums.size() % 2 == 0)
+				if (!nums.empty() && nums.size() % 2 == 0)
 				{
 					for (size_t i = 0; i < nums.size(); i += 2)
 					{
@@ -339,7 +339,7 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 'M' in path");
 				break;
 			case 'l':
-				if (nums.size() % 2 == 0)
+				if (!nums.empty() && nums.size() % 2 == 0)
 				{
 					for (size_t i = 0; i < nums.size(); i += 2)
 					{
@@ -409,7 +409,7 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 'v' in path");
 				break;
 			case 'Q':
-				if (nums.size() % 4 == 0)
+				if (!nums.empty() && nums.size() % 4 == 0)
 				{
 					for (size_t i = 0; i < nums.size(); i += 4)
 					{
@@ -423,7 +423,7 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 'Q' in path");
 				break;
 			case 'q':
-				if (nums.size() % 4 == 0)
+				if (!nums.empty() && nums.size() % 4 == 0)
 				{
 					for (size_t i = 0; i < nums.size(); i += 4)
 					{
@@ -437,7 +437,7 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 'q' in path");
 				break;
 			case 'C':
-				if (nums.size() % 6 == 0)
+				if (!nums.empty() && nums.size() % 6 == 0)
 				{
 					for (size_t i = 0; i < nums.size(); i += 6)
 					{
@@ -452,7 +452,7 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 'C' in path");
 				break;
 			case 'c':
-				if (nums.size() % 6 == 0)
+				if (!nums.empty() && nums.size() % 6 == 0)
 				{
 					for (size_t i = 0; i < nums.size(); i += 6)
 					{
@@ -467,7 +467,7 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 'c' in path");
 				break;
 			case 'T':
-				if (nums.size() % 2 == 0)
+				if (!nums.empty() && nums.size() % 2 == 0)
 				{
 					// TODO: Could be optimized, because after one loop, we know there will be quad segment as the last one
 					for (size_t i = 0; i < nums.size(); i += 2)
@@ -492,7 +492,7 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 'T' in path");
 				break;
 			case 't':
-				if (nums.size() % 2 == 0)
+				if (!nums.empty() && nums.size() % 2 == 0)
 				{
 					// TODO: Could be optimized, same reason as above
 					for (size_t i = 0; i < nums.size(); i += 2)
@@ -518,7 +518,7 @@ namespace SvgRenderer {
 					SR_WARN("Invalid 't' in path");
 				break;
 			case 'S':
-				if (nums.size() % 4 == 0)
+				if (!nums.empty() && nums.size() % 4 == 0)
 				{
 					// TODO: Could be optimized, same reason as above
 					for (size_t i = 0; i < nums.size(); i += 4)

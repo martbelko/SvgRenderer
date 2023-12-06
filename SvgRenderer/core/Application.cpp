@@ -11,6 +11,8 @@
 #include "Renderer/Renderer.h"
 #include "Renderer/TileBuilder.h"
 #include "Renderer/Rasterizer.h"
+#include "Renderer/StorageBuffer.h"
+#include "Renderer/UniformBuffer.h"
 
 #include "Scene/OrthographicCamera.h"
 
@@ -20,9 +22,20 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <array>
 #include <vector>
 
 namespace SvgRenderer {
+
+#define MOVE_TO 0
+#define LINE_TO 1
+#define QUAD_TO 2
+#define CUBIC_TO 3
+
+#define GET_CMD_PATH_INDEX(value) (value >> 16)
+#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
+#define MAKE_CMD_PATH_INDEX(value, index) ((index << 16) | (value & 0x0000FFFF))
+#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0x0000FF00))
 
 	constexpr uint32_t SCREEN_WIDTH = 1900;
 	constexpr uint32_t SCREEN_HEIGHT = 1000;
@@ -33,25 +46,28 @@ namespace SvgRenderer {
 
 	struct PathRender
 	{
-		uint32_t index;
-		glm::vec4 color;
-		glm::mat4 transform;
+		uint32_t startCmdIndex;
+		uint32_t endCmdIndex;
+		glm::mat3 transform;
+		std::array<uint8_t, 4> color;
 	};
 
 	struct PathRenderCmd
 	{
-		PathCmd cmd;
-		uint32_t pathIndex;
+		uint32_t pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
+		std::array<glm::vec2, 3> points; // Maybe unused, but maximum 3 points for cubicTo
+		std::array<glm::vec2, 3> transformedPoints; // Maybe unused, but maximum 3 points for cubicTo
 	};
 
 	struct PathsContainer
 	{
 		std::vector<PathRender> paths;
 		std::vector<PathRenderCmd> commands;
+		std::vector<uint32_t> numOfSegments; // Specific for each path, size of paths + 1, first number will be zero
+		std::vector<uint32_t> positions;
 	};
 
-	PathsContainer g_AllPaths;
-	PathsContainer g_AllCommands;
+	static PathsContainer g_AllPaths;
 
 	static void Render(const SvgNode* node, TileBuilder& builder)
 	{
@@ -91,22 +107,32 @@ namespace SvgRenderer {
 			glm::vec4 normColor = { c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, path.fill.opacity };
 
 			g_AllPaths.paths.push_back(PathRender{
-				.index = g_PathIndex,
-				.color = normColor,
-				.transform = path.transform
+				.startCmdIndex = static_cast<uint32_t>(g_AllPaths.commands.size()),
+				.endCmdIndex = static_cast<uint32_t>(g_AllPaths.commands.size() + cmds.size() - 1),
+				.transform = path.transform,
+				.color = builder.color
 			});
 
 			for (const PathCmd& cmd : cmds)
 			{
+				uint32_t index = g_AllPaths.paths.size() - 1; // -1, since we added path in the previous lines
+				uint32_t pathIndexCmdType = MAKE_CMD_PATH_INDEX(0, index);
+				pathIndexCmdType = MAKE_CMD_TYPE(pathIndexCmdType, static_cast<uint32_t>(cmd.type));
+
+				std::array<glm::vec2, 3> points;
+				points[0] = cmd.as.cubicTo.p1;
+				points[1] = cmd.as.cubicTo.p2;
+				points[2] = cmd.as.cubicTo.p3;
+
 				g_AllPaths.commands.push_back(PathRenderCmd{
-					.cmd = cmd,
-					.pathIndex = g_PathIndex
+					.pathIndexCmdType = pathIndexCmdType,
+					.points = points
 				});
 			}
 
-			Rasterizer rast(SCREEN_WIDTH, SCREEN_HEIGHT);
-			rast.Fill(cmds, path.transform);
-			rast.Finish(builder);
+			//Rasterizer rast(SCREEN_WIDTH, SCREEN_HEIGHT);
+			// rast.Fill(cmds, path.transform);
+			//rast.Finish(builder);
 
 			++g_PathIndex;
 			break;
@@ -115,6 +141,59 @@ namespace SvgRenderer {
 
 		for (const SvgNode* child : node->children)
 			Render(child, builder);
+	}
+
+
+	static glm::vec2 ApplyTransform(const glm::mat3& transform, const glm::vec2& point)
+	{
+		return transform * glm::vec3(point, 1.0f);
+	}
+
+	//switch (type)
+	//{
+	//case PathCmdType::MoveTo:
+	//	return PathCmd(MoveToCmd(ApplyTransform(transform, as.moveTo.point)));
+	//case PathCmdType::LineTo:
+	//	return PathCmd(LineToCmd(ApplyTransform(transform, as.lineTo.p1)));
+	//case PathCmdType::QuadTo:
+	//	return PathCmd(QuadToCmd(ApplyTransform(transform, as.quadTo.p1), ApplyTransform(transform, as.quadTo.p2)));
+	//case PathCmdType::CubicTo:
+	//	return PathCmd(CubicToCmd(ApplyTransform(transform, as.cubicTo.p1), ApplyTransform(transform, as.cubicTo.p2), ApplyTransform(transform, as.cubicTo.p3)));
+	//case PathCmdType::ConicTo:
+	//	// TODO: Implement
+	//	assert(false && "Not implemented");
+	//	break;
+	//case PathCmdType::Close:
+	//	return PathCmd(CloseCmd{});
+	//}
+	//
+	//assert(false && "Unknown path type");
+	//return PathCmd(CloseCmd{});
+
+	static void TransformPath(uint32_t pathIndex)
+	{
+		PathRender& path = g_AllPaths.paths[pathIndex];
+		for (PathRenderCmd& cmd : g_AllPaths.commands)
+		{
+			uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
+			uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+			switch (cmdType)
+			{
+			case MOVE_TO:
+			case LINE_TO:
+				cmd.transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[0]);
+				break;
+			case QUAD_TO:
+				cmd.transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[0]);
+				cmd.transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[1]);
+				break;
+			case CUBIC_TO:
+				cmd.transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[0]);
+				cmd.transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[1]);
+				cmd.transformedPoints[2] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[2]);
+				break;
+			}
+		}
 	}
 
 	void Application::Init()
@@ -138,10 +217,63 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/test.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/tigerr.svg");
 		SR_TRACE("Parsing finish");
 
 		Render(root, m_TileBuilder);
+
+		for (const PathRender& path : g_AllPaths.paths)
+		{
+			std::vector<PathCmd> cmds;
+			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; ++i)
+			{
+				const PathRenderCmd& rndCmd = g_AllPaths.commands[i];
+				uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+				switch (pathType)
+				{
+				case MOVE_TO:
+					cmds.emplace_back(MoveToCmd{
+						.point = rndCmd.points[0]
+						});
+					break;
+				case LINE_TO:
+					cmds.emplace_back(LineToCmd{
+						.p1 = rndCmd.points[0]
+						});
+					break;
+				case QUAD_TO:
+					cmds.emplace_back(QuadToCmd{
+						.p1 = rndCmd.points[0],
+						.p2 = rndCmd.points[1],
+						});
+					break;
+				case CUBIC_TO:
+					cmds.emplace_back(CubicToCmd{
+						.p1 = rndCmd.points[0],
+						.p2 = rndCmd.points[1],
+						.p3 = rndCmd.points[2],
+						});
+					break;
+				}
+			}
+
+			Rasterizer rast(SCREEN_WIDTH, SCREEN_HEIGHT);
+			rast.Fill(cmds, path.transform);
+
+			m_TileBuilder.color = path.color;
+			rast.Finish(m_TileBuilder);
+		}
+
+
+		//for (uint32_t pathIndex = 0; pathIndex < g_AllPaths.paths.size(); ++pathIndex)
+		//{
+		//	TransformPath(pathIndex);
+		//}
+		//
+		//for (const PathRender& path : g_AllPaths.paths)
+		//{
+		//	CalculateNumberOfSegments(path);
+		//}
 	}
 
 	void Application::Shutdown()

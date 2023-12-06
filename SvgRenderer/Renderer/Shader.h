@@ -7,8 +7,12 @@ namespace SvgRenderer {
 	class Shader
 	{
 	public:
+		Shader(uint32_t rendererId)
+			: m_RendererId(rendererId) {}
 		Shader(const std::filesystem::path& vertexPath, const std::filesystem::path& fragmentPath);
 		~Shader();
+
+		void Dispatch(uint32_t x, uint32_t y, uint32_t z);
 
 		void Bind() const;
 
@@ -27,10 +31,13 @@ namespace SvgRenderer {
 		{
 			return CreateRef<Shader>(vertexPath, fragmentPath);
 		}
+
+		static Ref<Shader> CreateCompute(const std::filesystem::path& filepath);
 	private:
 		static std::string ReadFile(const std::filesystem::path& filepath);
 		static uint32_t CompileShader(const std::string& source, uint32_t shaderType);
 		static uint32_t LinkShader(uint32_t vertexShader, uint32_t fragmentShader);
+		static uint32_t LinkShader(uint32_t computeShader);
 	private:
 		uint32_t m_RendererId;
 	};

@@ -209,7 +209,7 @@ namespace SvgRenderer {
 				return result;
 			};
 
-		//bins = filterBins();
+		bins = filterBins();
 
 		for (size_t i = 0; i < bins.size(); i++)
 		{
@@ -296,10 +296,6 @@ namespace SvgRenderer {
 			if (nextBin == nullptr)
 			{
 				std::fill(coverage.begin(), coverage.end(), 0.0f);
-			}
-			else
-			{
-
 			}
 		}
 	}

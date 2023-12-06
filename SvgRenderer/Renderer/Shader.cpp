@@ -22,6 +22,12 @@ namespace SvgRenderer {
 		glDeleteProgram(m_RendererId);
 	}
 
+	void Shader::Dispatch(uint32_t x, uint32_t y, uint32_t z)
+	{
+		Bind();
+		glDispatchCompute(x, y, z);
+	}
+
 	void Shader::Bind() const
 	{
 		glUseProgram(m_RendererId);
@@ -83,6 +89,37 @@ namespace SvgRenderer {
 		glDeleteShader(fragmentShader);
 
 		return program;
+	}
+
+	uint32_t Shader::LinkShader(uint32_t computeShader)
+	{
+		uint32_t program = glCreateProgram();
+		glAttachShader(program, computeShader);
+		glLinkProgram(program);
+
+		int success;
+		glGetProgramiv(program, GL_LINK_STATUS, &success);
+		if (!success)
+		{
+			char infoLog[512];
+			glGetProgramInfoLog(program, 512, NULL, infoLog);
+			SR_ERROR("Error with shader linking:\n\t{0}", infoLog);
+			return 0;
+		}
+
+		glDetachShader(program, computeShader);
+		glDeleteShader(computeShader);
+
+		return program;
+	}
+
+	Ref<Shader> Shader::CreateCompute(const std::filesystem::path& filepath)
+	{
+		std::string source = ReadFile(filepath);
+		uint32_t shader = CompileShader(source, GL_COMPUTE_SHADER);
+
+		uint32_t rendererId = LinkShader(shader);
+		return CreateRef<Shader>(rendererId);
 	}
 
 	void Shader::SetUniformInt(uint32_t uniformLocation, int value)
