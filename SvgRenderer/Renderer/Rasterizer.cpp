@@ -111,15 +111,19 @@ namespace SvgRenderer {
 
 					size_t currentIndex = std::max(std::min(GetTileIndex(v1, currentTileY), tiles.size() - 1), static_cast<size_t>(0));
 
-					for (size_t i = 0; i < currentIndex; ++i)
+					for (size_t i = 0; i < currentIndex; i++)
+					{
 						tiles[i].winding += v2;
+					}
 
 					prevTileY = tileY;
 				}
 
-				// Break the loop if scanline or column completion condition is met
+				// Break the loop if we are on the end
 				if (rowt0 == 1.0f || colt0 == 1.0f)
+				{
 					break;
+				}
 			}
 		}
 
@@ -178,7 +182,9 @@ namespace SvgRenderer {
 
 		Bin* currentBin = &GetBin(0, 0);
 		if (!increments.empty())
+		{
 			currentBin = &GetBin(increments[0].x / TILE_SIZE, increments[0].y / TILE_SIZE);
+		}
 
 		for (size_t i = 0; i < increments.size(); ++i)
 		{
@@ -198,16 +204,18 @@ namespace SvgRenderer {
 		}
 
 		auto filterBins = [&]()
+		{
+			std::vector<Bin> result;
+			for (const Bin& bin : bins)
 			{
-				std::vector<Bin> result;
-				for (const Bin& bin : bins)
+				if (bin.end != bin.start)
 				{
-					if (bin.end != bin.start)
-						result.push_back(bin);
+					result.push_back(bin);
 				}
+			}
 
-				return result;
-			};
+			return result;
+		};
 
 		bins = filterBins();
 
@@ -215,10 +223,12 @@ namespace SvgRenderer {
 		{
 			const Bin& bin = bins[i];
 			if (bin.start == bin.end)
+			{
 				continue;
+			}
 
 			Bin* nextBin = nullptr;
-			for (size_t j = i + 1; j < bins.size() && bins[j].tileY == bin.tileY; ++j)
+			for (size_t j = i + 1; j < bins.size() && bins[j].tileY == bin.tileY; j++)
 			{
 				if (bins[j].start != bins[j].end)
 				{
@@ -242,13 +252,10 @@ namespace SvgRenderer {
 		std::array<float, TILE_SIZE * TILE_SIZE> heights{};
 		std::array<float, TILE_SIZE> coverage{};
 
-		int ctr = 0;
-
 		for (size_t i = 0; i < bins.size(); ++i)
 		{
-			++ctr;
 			const Bin& bin = bins[i];
-			if (bin.end == bin.start && ctr < 7000)
+			if (bin.end == bin.start)
 				continue;
 
 			for (size_t i = bin.start; i < bin.end; ++i)

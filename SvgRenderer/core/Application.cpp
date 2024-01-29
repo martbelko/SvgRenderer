@@ -185,26 +185,26 @@ namespace SvgRenderer {
 		PathRender& path = g_AllPaths.paths[pathIndex];
 
 		auto transformCurve = [](PathRenderCmd* cmd)
+		{
+			uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd->pathIndexCmdType);
+			uint32_t cmdType = GET_CMD_TYPE(cmd->pathIndexCmdType);
+			switch (cmdType)
 			{
-				uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd->pathIndexCmdType);
-				uint32_t cmdType = GET_CMD_TYPE(cmd->pathIndexCmdType);
-				switch (cmdType)
-				{
-				case MOVE_TO:
-				case LINE_TO:
-					cmd->transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[0]);
-					break;
-				case QUAD_TO:
-					cmd->transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[0]);
-					cmd->transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[1]);
-					break;
-				case CUBIC_TO:
-					cmd->transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[0]);
-					cmd->transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[1]);
-					cmd->transformedPoints[2] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[2]);
-					break;
-				}
-			};
+			case MOVE_TO:
+			case LINE_TO:
+				cmd->transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[0]);
+				break;
+			case QUAD_TO:
+				cmd->transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[0]);
+				cmd->transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[1]);
+				break;
+			case CUBIC_TO:
+				cmd->transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[0]);
+				cmd->transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[1]);
+				cmd->transformedPoints[2] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[2]);
+				break;
+			}
+		};
 
 		std::vector<std::future<void>> futures;
 		futures.reserve(path.endCmdIndex - path.startCmdIndex + 1);
@@ -244,12 +244,14 @@ namespace SvgRenderer {
 		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/tigerr.svg");
 		SR_TRACE("Parsing finish");
 
+		// This actually fills information about colors and other attributes from the SVG root node
 		Render(root, m_TileBuilder);
 
 		// Everything after this line may be done in each frame
 
 #define ASYNC 1
 
+		// 1.step: Transform the paths
 #if ASYNC == 1
 		std::vector<std::future<void>> futures;
 		futures.reserve(g_AllPaths.paths.size());
