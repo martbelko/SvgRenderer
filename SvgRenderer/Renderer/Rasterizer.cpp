@@ -73,12 +73,12 @@ namespace SvgRenderer {
 				float right = x + 1;
 				float area = 0.5f * height * ((right - p0.x) + (right - p1.x));
 
-				increments.push_back(Increment{
-					.x = x,
-					.y = y,
-					.area = area,
-					.height = height
-					});
+				int32_t relativeX = x % TILE_SIZE;
+				int32_t relativeY = y % TILE_SIZE;
+
+				GetTile(x / TILE_SIZE, y / TILE_SIZE).increments[relativeY * TILE_SIZE + relativeX].area += area;
+				GetTile(x / TILE_SIZE, y / TILE_SIZE).increments[relativeY * TILE_SIZE + relativeX].height += height;
+				GetTile(x / TILE_SIZE, y / TILE_SIZE).hasIncrements = true;
 
 				// Advance to the next scanline
 				if (rowt1 < colt1)
@@ -169,81 +169,46 @@ namespace SvgRenderer {
 			LineTo(first);
 		}
 
-		// Increments may be in any order
-
-		std::sort(increments.begin(), increments.end(), [](const Increment& inc1, const Increment& inc2)
+		auto filterTiles = [&]()
 		{
-			const int32_t tile1X = inc1.x / TILE_SIZE;
-			const int32_t tile1Y = inc1.y / TILE_SIZE;
-			const int32_t tile2X = inc2.x / TILE_SIZE;
-			const int32_t tile2Y = inc2.y / TILE_SIZE;
-			return std::tie(tile1Y, tile1X) < std::tie(tile2Y, tile2X);
-		});
-
-		Bin* currentBin = &GetBin(0, 0);
-		if (!increments.empty())
-		{
-			currentBin = &GetBin(increments[0].x / TILE_SIZE, increments[0].y / TILE_SIZE);
-		}
-
-		for (size_t i = 0; i < increments.size(); ++i)
-		{
-			const Increment& increment = increments[i];
-			const int32_t tileX = increment.x / TILE_SIZE;
-			const int32_t tileY = increment.y / TILE_SIZE;
-
-			if (tileX != currentBin->tileX || tileY != currentBin->tileY)
+			std::vector<Tile> result;
+			for (const Tile& tile : tiles)
 			{
-				// TODO: Check if tile indices are in valid range
-				currentBin = &GetBin(tileX, tileY);
-				currentBin->start = i;
-				currentBin->end = i;
-			}
-
-			++(currentBin->end);
-		}
-
-		auto filterBins = [&]()
-		{
-			std::vector<Bin> result;
-			for (const Bin& bin : bins)
-			{
-				if (bin.end != bin.start)
+				if (tile.hasIncrements)
 				{
-					result.push_back(bin);
+					result.push_back(tile);
 				}
 			}
 
 			return result;
 		};
+		auto filteredTiles = filterTiles();
 
-		bins = filterBins();
-
-		for (size_t i = 0; i < bins.size(); i++)
+		for (size_t i = 0; i < filteredTiles.size(); i++)
 		{
-			const Bin& bin = bins[i];
-			if (bin.start == bin.end)
+			const Tile& tile = filteredTiles[i];
+			if (!tile.hasIncrements)
 			{
 				continue;
 			}
-
-			Bin* nextBin = nullptr;
-			for (size_t j = i + 1; j < bins.size() && bins[j].tileY == bin.tileY; j++)
+		
+			Tile* nextTile = nullptr;
+			for (size_t j = i + 1; j < filteredTiles.size() && filteredTiles[j].tileY == tile.tileY; j++)
 			{
-				if (bins[j].start != bins[j].end)
+				if (filteredTiles[j].hasIncrements)
 				{
-					nextBin = &bins[j];
+					nextTile = &filteredTiles[j];
 					break;
 				}
 			}
-
-			if (nextBin != nullptr)
+		
+			if (nextTile != nullptr)
 			{
 				// If the winding is nonzero, span the whole tile
-				if (GetTile(bin.tileX, bin.tileY).winding != 0)
+				if (GetTile(tile.tileX, tile.tileY).winding != 0)
 				{
-					int32_t width = nextBin->tileX - bin.tileX - 1;
-					builder.Span((bin.tileX + 1) * TILE_SIZE, bin.tileY * TILE_SIZE, width * TILE_SIZE);
+					int32_t width = nextTile->tileX - tile.tileX - 1;
+					builder.Span((tile.tileX + 1) * TILE_SIZE, tile.tileY * TILE_SIZE, width * TILE_SIZE);
 				}
 			}
 		}
@@ -252,23 +217,24 @@ namespace SvgRenderer {
 		std::array<float, TILE_SIZE * TILE_SIZE> heights{};
 		std::array<float, TILE_SIZE> coverage{};
 
-		for (size_t i = 0; i < bins.size(); ++i)
+		for (size_t i = 0; i < filteredTiles.size(); ++i)
 		{
-			const Bin& bin = bins[i];
-			if (bin.end == bin.start)
+			const Tile& tile = filteredTiles[i];
+			if (!tile.hasIncrements)
 				continue;
 
-			for (size_t i = bin.start; i < bin.end; ++i)
+			for (int32_t y = 0; y < TILE_SIZE; y++)
 			{
-				const Increment& increment = increments[i];
-				// Loop over each increment inside the tile
-				uint32_t x = increment.x % TILE_SIZE; // Pixel x-coord relative to the tile
-				uint32_t y = increment.y % TILE_SIZE; // Pixel y-coord relative to the tile
-				areas[y * TILE_SIZE + x] += increment.area; // Just simple increment for area
-				heights[y * TILE_SIZE + x] += increment.height; // Just simple increment for height
+				for (int32_t x = 0; x < TILE_SIZE; x++)
+				{
+					const Increment& increment = tile.increments[y * TILE_SIZE + x];
+					// Loop over each increment inside the tile
+					areas[y * TILE_SIZE + x] = increment.area; // Just simple increment for area
+					heights[y * TILE_SIZE + x] = increment.height; // Just simple increment for height
+				}
 			}
 
-			std::array<uint8_t, TILE_SIZE * TILE_SIZE> tile;
+			std::array<uint8_t, TILE_SIZE * TILE_SIZE> tileData;
 
 			// For each y-coord in the tile
 			for (uint32_t y = 0; y < TILE_SIZE; ++y)
@@ -278,29 +244,29 @@ namespace SvgRenderer {
 				// For each x-coord in the tile
 				for (uint32_t x = 0; x < TILE_SIZE; ++x)
 				{
-					tile[y * TILE_SIZE + x] = glm::min(glm::abs(accum + areas[y * TILE_SIZE + x]) * 256.0f, 255.0f);
+					tileData[y * TILE_SIZE + x] = glm::min(glm::abs(accum + areas[y * TILE_SIZE + x]) * 256.0f, 255.0f);
 					accum += heights[y * TILE_SIZE + x];
 				}
 
 				coverage[y] = accum;
 			}
 
-			builder.Tile(bin.tileX * TILE_SIZE, bin.tileY * TILE_SIZE, tile);
+			builder.Tile(tile.tileX * TILE_SIZE, tile.tileY * TILE_SIZE, tileData);
 
 			std::fill(areas.begin(), areas.end(), 0.0f);
 			std::fill(heights.begin(), heights.end(), 0.0f);
 
-			Bin* nextBin = nullptr; // Next active bin in the same y-coord, same as the previous one, could be optimized and only done once
-			for (size_t j = i + 1; j < bins.size() && bins[j].tileY == bin.tileY; ++j)
+			Tile* nextTile = nullptr; // Next active bin in the same y-coord, same as the previous one, could be optimized and only done once
+			for (size_t j = i + 1; j < filteredTiles.size() && filteredTiles[j].tileY == tile.tileY; ++j)
 			{
-				if (bins[j].start != bins[j].end)
+				if (filteredTiles[j].hasIncrements)
 				{
-					nextBin = &bins[j];
+					nextTile = &filteredTiles[j];
 					break;
 				}
 			}
 
-			if (nextBin == nullptr)
+			if (nextTile == nullptr)
 			{
 				std::fill(coverage.begin(), coverage.end(), 0.0f);
 			}
