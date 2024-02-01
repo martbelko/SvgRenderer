@@ -16,6 +16,8 @@
 
 #include "Scene/OrthographicCamera.h"
 
+#include "Utils/BoundingBox.h"
+
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
 
@@ -51,6 +53,7 @@ namespace SvgRenderer {
 		uint32_t endCmdIndex;
 		glm::mat3 transform;
 		std::array<uint8_t, 4> color;
+		BoundingBox bbox;
 	};
 
 	struct PathRenderCmd
@@ -113,7 +116,8 @@ namespace SvgRenderer {
 				.startCmdIndex = static_cast<uint32_t>(g_AllPaths.commands.size()),
 				.endCmdIndex = static_cast<uint32_t>(g_AllPaths.commands.size() + cmds.size() - 1),
 				.transform = path.transform,
-				.color = builder.color
+				.color = builder.color,
+				.bbox = BoundingBox()
 			});
 
 			for (const PathCmd& cmd : cmds)
@@ -134,7 +138,7 @@ namespace SvgRenderer {
 			}
 
 			//Rasterizer rast(SCREEN_WIDTH, SCREEN_HEIGHT);
-			// rast.Fill(cmds, path.transform);
+			//rast.Fill(cmds, path.transform);
 			//rast.Finish(builder);
 
 			++g_PathIndex;
@@ -250,7 +254,6 @@ namespace SvgRenderer {
 		// Everything after this line may be done in each frame
 
 #define ASYNC 1
-
 		// 1.step: Transform the paths
 #if ASYNC == 1
 		std::vector<std::future<void>> futures;
@@ -271,7 +274,7 @@ namespace SvgRenderer {
 			TransformPath(pathIndex);
 		}
 #endif
-
+		// 2.step: The rest
 		for (const PathRender& path : g_AllPaths.paths)
 		{
 			std::vector<PathCmd> cmds;

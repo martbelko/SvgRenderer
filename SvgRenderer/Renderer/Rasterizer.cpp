@@ -13,6 +13,41 @@ namespace SvgRenderer {
 		return 0;
 	}
 
+	Rasterizer::Rasterizer(uint32_t windowWidth, uint32_t windowHeight)
+		: m_Width(windowWidth), m_Height(windowHeight)
+	{
+		m_TileCountX = std::ceil(static_cast<float>(m_Width) / TILE_SIZE);
+		m_TileCountY = std::ceil(static_cast<float>(m_Height) / TILE_SIZE);
+		uint32_t tileCount = m_TileCountX * m_TileCountY;
+
+		tiles.reserve(tileCount);
+		for (int32_t y = 0; y < m_TileCountY; ++y)
+		{
+			for (int32_t x = 0; x < m_TileCountX; ++x)
+			{
+				tiles.push_back(Tile{
+					.tileX = x,
+					.tileY = y,
+					.winding = 0,
+					.hasIncrements = false,
+					.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
+					});
+
+				Tile& tile = tiles.back();
+				for (int32_t relativeY = 0; relativeY < TILE_SIZE; relativeY++)
+				{
+					for (int32_t relativeX = 0; relativeX < TILE_SIZE; relativeX++)
+					{
+						tile.increments[relativeY * TILE_SIZE + relativeX].x = relativeX;
+						tile.increments[relativeY * TILE_SIZE + relativeX].y = relativeY;
+						tile.increments[relativeY * TILE_SIZE + relativeX].area = 0;
+						tile.increments[relativeY * TILE_SIZE + relativeX].height = 0;
+					}
+				}
+			}
+		}
+	}
+
 	void Rasterizer::MoveTo(const glm::vec2& point)
 	{
 		if (last != first)
@@ -130,9 +165,9 @@ namespace SvgRenderer {
 		last = point;
 	}
 
-	void Rasterizer::Command(const PathCmd& command)
+	void Rasterizer::Command(const PathCmd& command, const glm::vec2& lastPoint)
 	{
-		command.Flatten(last, TOLERANCE, [this](const PathCmd& cmd)
+		command.Flatten(lastPoint, TOLERANCE, [this](const PathCmd& cmd)
 		{
 			switch (cmd.type)
 			{
@@ -151,9 +186,34 @@ namespace SvgRenderer {
 
 	void Rasterizer::Fill(const std::vector<PathCmd>& path)
 	{
+		if (path.empty())
+		{
+			return;
+		}
+
+		glm::vec2 last = glm::vec2(0, 0);
 		for (const PathCmd& cmd : path)
 		{
-			Command(cmd);
+			Command(cmd, last);
+			switch (cmd.type)
+			{
+			case PathCmdType::MoveTo:
+				last = cmd.as.moveTo.point;
+				break;
+			case PathCmdType::LineTo:
+				last = cmd.as.lineTo.p1;
+				break;
+			case PathCmdType::QuadTo:
+				last = cmd.as.quadTo.p2;
+				break;
+			case PathCmdType::CubicTo:
+				last = cmd.as.cubicTo.p3;
+				break;
+			default:
+				// TODO: Add others
+				assert(false);
+				break;
+			}
 		}
 	}
 

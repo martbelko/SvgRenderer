@@ -30,40 +30,7 @@ namespace SvgRenderer {
 	class Rasterizer
 	{
 	public:
-		Rasterizer(uint32_t windowWidth, uint32_t windowHeight)
-			: m_Width(windowWidth), m_Height(windowHeight)
-		{
-			m_TileCountX = std::ceil(static_cast<float>(m_Width) / TILE_SIZE);
-			m_TileCountY = std::ceil(static_cast<float>(m_Height) / TILE_SIZE);
-			uint32_t tileCount = m_TileCountX * m_TileCountY;
-
-			tiles.reserve(tileCount);
-			for (int32_t y = 0; y < m_TileCountY; ++y)
-			{
-				for (int32_t x = 0; x < m_TileCountX; ++x)
-				{
-					tiles.push_back(Tile{
-						.tileX = x,
-						.tileY = y,
-						.winding = 0,
-						.hasIncrements = false,
-						.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
-						});
-
-					auto& t = tiles.back();
-					for (int32_t relativeY = 0; relativeY < TILE_SIZE; relativeY++)
-					{
-						for (int32_t relativeX = 0; relativeX < TILE_SIZE; relativeX++)
-						{
-							t.increments[relativeY * TILE_SIZE + relativeX].x = relativeX;
-							t.increments[relativeY * TILE_SIZE + relativeX].y = relativeY;
-							t.increments[relativeY * TILE_SIZE + relativeX].area = 0;
-							t.increments[relativeY * TILE_SIZE + relativeX].height = 0;
-						}
-					}
-				}
-			}
-		}
+		Rasterizer(uint32_t windowWidth, uint32_t windowHeight);
 
 		Tile& GetTile(int x, int y) { return tiles[y * m_TileCountX + x]; }
 
@@ -79,9 +46,9 @@ namespace SvgRenderer {
 		int16_t prevTileY = 0;
 
 		void MoveTo(const glm::vec2& point);
-		void LineTo(const glm::vec2& point);
+		void LineTo(const glm::vec2& p1);
 
-		void Command(const PathCmd& command);
+		void Command(const PathCmd& command, const glm::vec2& lastPoint);
 
 		void Fill(const std::vector<PathCmd>& path);
 		void Stroke(const std::vector<PathCmd>& path, float width, const glm::mat3& transform);
