@@ -66,10 +66,8 @@ namespace SvgRenderer {
 			: type(PathCmdType::Close), as(CmdAs{ .close = cmd }) {}
 
 		PathCmd Transform(const glm::mat3& transform) const;
-		void Flatten(glm::vec2 last, float tolerance, std::function<void(const PathCmd&)> callback) const;
 	};
 
-	std::vector<PathCmd> PathFlatten(const std::vector<PathCmd>& commands, float tolerance);
 	std::vector<PathCmd> PathStroke(const std::vector<PathCmd>& polygon, float width);
 
 }

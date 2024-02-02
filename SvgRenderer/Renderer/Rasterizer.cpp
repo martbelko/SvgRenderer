@@ -1,5 +1,7 @@
 #include "Rasterizer.h"
 
+#include "Renderer/Flattening.h"
+
 #include <cassert>
 
 namespace SvgRenderer {
@@ -167,7 +169,8 @@ namespace SvgRenderer {
 
 	void Rasterizer::Command(const PathCmd& command, const glm::vec2& lastPoint)
 	{
-		command.Flatten(lastPoint, TOLERANCE, [this](const PathCmd& cmd)
+		auto simpleCommands = Flattening::Flatten(command, lastPoint, TOLERANCE);
+		for (const auto& cmd : simpleCommands)
 		{
 			switch (cmd.type)
 			{
@@ -181,7 +184,7 @@ namespace SvgRenderer {
 				assert(false && "Only moves and lines");
 				break;
 			}
-		});
+		}
 	}
 
 	void Rasterizer::Fill(const std::vector<PathCmd>& path)

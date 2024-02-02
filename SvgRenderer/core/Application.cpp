@@ -14,6 +14,8 @@
 #include "Renderer/StorageBuffer.h"
 #include "Renderer/UniformBuffer.h"
 
+#include "Renderer/Defs.h"
+
 #include "Scene/OrthographicCamera.h"
 
 #include "Utils/BoundingBox.h"
@@ -46,34 +48,6 @@ namespace SvgRenderer {
 	uint32_t g_PathIndex = 0;
 
 	Application Application::s_Instance;
-
-	struct PathRender
-	{
-		uint32_t startCmdIndex;
-		uint32_t endCmdIndex;
-		glm::mat3 transform;
-		std::array<uint8_t, 4> color;
-		BoundingBox bbox;
-	};
-
-	struct PathRenderCmd
-	{
-		uint32_t pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
-		std::array<glm::vec2, 3> points; // Maybe unused, but maximum 3 points for cubicTo
-		std::array<glm::vec2, 3> transformedPoints; // Maybe unused, but maximum 3 points for cubicTo
-	};
-
-	struct PathsContainer
-	{
-		std::vector<PathRender> paths;
-		std::vector<PathRenderCmd> commands;
-		std::vector<uint32_t> numOfSegments; // Specific for each path, size of paths + 1, first number will be zero
-		std::vector<uint32_t> positions;
-	};
-
-	static glm::mat4 g_GlobalTransform = glm::mat4(1.0f);
-
-	static PathsContainer g_AllPaths;
 
 	static void Render(const SvgNode* node, TileBuilder& builder)
 	{
@@ -112,9 +86,9 @@ namespace SvgRenderer {
 
 			glm::vec4 normColor = { c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, path.fill.opacity };
 
-			g_AllPaths.paths.push_back(PathRender{
-				.startCmdIndex = static_cast<uint32_t>(g_AllPaths.commands.size()),
-				.endCmdIndex = static_cast<uint32_t>(g_AllPaths.commands.size() + cmds.size() - 1),
+			Globals::AllPaths.paths.push_back(PathRender{
+				.startCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size()),
+				.endCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size() + cmds.size() - 1),
 				.transform = path.transform,
 				.color = builder.color,
 				.bbox = BoundingBox()
@@ -122,7 +96,7 @@ namespace SvgRenderer {
 
 			for (const PathCmd& cmd : cmds)
 			{
-				uint32_t index = g_AllPaths.paths.size() - 1; // -1, since we added path in the previous lines
+				uint32_t index = Globals::AllPaths.paths.size() - 1; // -1, since we added path in the previous lines
 				uint32_t pathIndexCmdType = MAKE_CMD_PATH_INDEX(0, index);
 				pathIndexCmdType = MAKE_CMD_TYPE(pathIndexCmdType, static_cast<uint32_t>(cmd.type));
 
@@ -131,7 +105,7 @@ namespace SvgRenderer {
 				points[1] = cmd.as.cubicTo.p2;
 				points[2] = cmd.as.cubicTo.p3;
 
-				g_AllPaths.commands.push_back(PathRenderCmd{
+				Globals::AllPaths.commands.push_back(PathRenderCmd{
 					.pathIndexCmdType = pathIndexCmdType,
 					.points = points
 				});
@@ -154,31 +128,31 @@ namespace SvgRenderer {
 
 	static glm::vec2 ApplyTransform(const glm::mat3& transform, const glm::vec2& point)
 	{
-		return g_GlobalTransform * glm::vec4(transform * glm::vec3(point, 1.0f), 1.0f);
+		return Globals::GlobalTransform * glm::vec4(transform * glm::vec3(point, 1.0f), 1.0f);
 	}
 
 	static void TransformPath(uint32_t pathIndex)
 	{
-		PathRender& path = g_AllPaths.paths[pathIndex];
+		PathRender& path = Globals::AllPaths.paths[pathIndex];
 		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
 		{
-			PathRenderCmd& cmd = g_AllPaths.commands[i];
+			PathRenderCmd& cmd = Globals::AllPaths.commands[i];
 			uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
 			uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
 			switch (cmdType)
 			{
 			case MOVE_TO:
 			case LINE_TO:
-				cmd.transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[0]);
+				cmd.transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[0]);
 				break;
 			case QUAD_TO:
-				cmd.transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[0]);
-				cmd.transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[1]);
+				cmd.transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[0]);
+				cmd.transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[1]);
 				break;
 			case CUBIC_TO:
-				cmd.transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[0]);
-				cmd.transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[1]);
-				cmd.transformedPoints[2] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd.points[2]);
+				cmd.transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[0]);
+				cmd.transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[1]);
+				cmd.transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[2]);
 				break;
 			}
 		}
@@ -186,7 +160,7 @@ namespace SvgRenderer {
 
 	static void TransformPathAsync(uint32_t pathIndex)
 	{
-		PathRender& path = g_AllPaths.paths[pathIndex];
+		PathRender& path = Globals::AllPaths.paths[pathIndex];
 
 		auto transformCurve = [](PathRenderCmd* cmd)
 		{
@@ -196,16 +170,16 @@ namespace SvgRenderer {
 			{
 			case MOVE_TO:
 			case LINE_TO:
-				cmd->transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[0]);
+				cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
 				break;
 			case QUAD_TO:
-				cmd->transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[0]);
-				cmd->transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[1]);
+				cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+				cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
 				break;
 			case CUBIC_TO:
-				cmd->transformedPoints[0] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[0]);
-				cmd->transformedPoints[1] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[1]);
-				cmd->transformedPoints[2] = ApplyTransform(g_AllPaths.paths[pathIndex].transform, cmd->points[2]);
+				cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+				cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
+				cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
 				break;
 			}
 		};
@@ -215,7 +189,7 @@ namespace SvgRenderer {
 
 		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
 		{
-			futures.push_back(std::async(std::launch::async, transformCurve, &g_AllPaths.commands[i]));
+			futures.push_back(std::async(std::launch::async, transformCurve, &Globals::AllPaths.commands[i]));
 		}
 
 		for (auto& f : futures)
@@ -257,9 +231,9 @@ namespace SvgRenderer {
 		// 1.step: Transform the paths
 #if ASYNC == 1
 		std::vector<std::future<void>> futures;
-		futures.reserve(g_AllPaths.paths.size());
+		futures.reserve(Globals::AllPaths.paths.size());
 
-		for (uint32_t pathIndex = 0; pathIndex < g_AllPaths.paths.size(); ++pathIndex)
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
 		{
 			futures.push_back(std::async(std::launch::async, TransformPathAsync, pathIndex));
 		}
@@ -269,18 +243,18 @@ namespace SvgRenderer {
 			f.wait();
 		}
 #else
-		for (uint32_t pathIndex = 0; pathIndex < g_AllPaths.paths.size(); ++pathIndex)
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
 		{
 			TransformPath(pathIndex);
 		}
 #endif
 		// 2.step: The rest
-		for (const PathRender& path : g_AllPaths.paths)
+		for (const PathRender& path : Globals::AllPaths.paths)
 		{
 			std::vector<PathCmd> cmds;
 			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; ++i)
 			{
-				const PathRenderCmd& rndCmd = g_AllPaths.commands[i];
+				const PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
 				uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
 				switch (pathType)
 				{
@@ -317,12 +291,12 @@ namespace SvgRenderer {
 			rast.Finish(m_TileBuilder);
 		}
 
-		//for (uint32_t pathIndex = 0; pathIndex < g_AllPaths.paths.size(); ++pathIndex)
+		//for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
 		//{
 		//	TransformPath(pathIndex);
 		//}
 		//
-		//for (const PathRender& path : g_AllPaths.paths)
+		//for (const PathRender& path : Globals::AllPaths.paths)
 		//{
 		//	CalculateNumberOfSegments(path);
 		//}
