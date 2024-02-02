@@ -83,8 +83,11 @@ namespace SvgRenderer {
 		}
 		case PathCmdType::ConicTo:
 			// TODO: Implement
+			assert(false && "Not implemented");
 			break;
 		case PathCmdType::Close:
+			// TODO: Implement
+			assert(false && "Not implemented");
 			break;
 		default:
 			assert(false && "Unknown path type");
@@ -162,110 +165,5 @@ namespace SvgRenderer {
 				}
 			};
 	}
-
-	/*
-	#[inline]
-	fn offset(path: &mut Vec<PathCmd>, width: f32, contour: &[PathCmd], closed: bool, reverse: bool) {
-		let first_point = if closed == reverse {
-			get_point(contour[0])
-		} else {
-			get_point(*contour.last().unwrap())
-		};
-		let mut prev_point = first_point;
-		let mut prev_normal = Vec2::new(0.0, 0.0);
-		let mut i = 0;
-		loop {
-			let next_point = if i < contour.len() {
-				if reverse {
-					get_point(contour[contour.len() - i - 1])
-				} else {
-					get_point(contour[i])
-				}
-			} else {
-				first_point
-			};
-
-			if next_point != prev_point || i == contour.len() {
-				let next_tangent = next_point - prev_point;
-				let next_normal = Vec2::new(-next_tangent.y, next_tangent.x);
-				let next_normal_len = next_normal.length();
-				let next_normal = if next_normal_len == 0.0 {
-					Vec2::new(0.0, 0.0)
-				} else {
-					next_normal * (1.0 / next_normal_len)
-				};
-
-				join(path, width, prev_normal, next_normal, prev_point);
-
-				prev_point = next_point;
-				prev_normal = next_normal;
-			}
-
-			i += 1;
-			if i > contour.len() {
-				break;
-			}
-		}
-	}
-
-	let mut output = Vec::new();
-
-	let mut contour_start = 0;
-	let mut contour_end = 0;
-	let mut closed = false;
-	let mut commands = polygon.iter();
-	loop {
-		let command = commands.next();
-
-		if let Some(PathCmd::Close) = command {
-			closed = true;
-		}
-
-		if let None | Some(PathCmd::Move(_)) | Some(PathCmd::Close) = command {
-			if contour_start != contour_end {
-				let contour = &polygon[contour_start..contour_end];
-
-				let base = output.len();
-				offset(&mut output, width, contour, closed, false);
-				output[base] = PathCmd::Move(get_point(output[base]));
-				if closed {
-					output.push(PathCmd::Close);
-				}
-
-				let base = output.len();
-				offset(&mut output, width, contour, closed, true);
-				if closed {
-					output[base] = PathCmd::Move(get_point(output[base]));
-				}
-				output.push(PathCmd::Close);
-			}
-		}
-
-		if let Some(command) = command {
-			match command {
-				PathCmd::Move(_) => {
-					contour_start = contour_end;
-					contour_end = contour_start + 1;
-				}
-				PathCmd::Line(_) => {
-					contour_end += 1;
-				}
-				PathCmd::Close => {
-					contour_start = contour_end + 1;
-					contour_end = contour_start;
-					closed = true;
-				}
-				_ => {
-					panic!();
-				}
-			}
-		} else {
-			break;
-		}
-	}
-
-	output
-}
-	*/
 
 }

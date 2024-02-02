@@ -251,7 +251,7 @@ namespace SvgRenderer {
 			{
 				continue;
 			}
-		
+
 			Tile* nextTile = nullptr;
 			for (size_t j = i + 1; j < filteredTiles.size() && filteredTiles[j].tileY == tile.tileY; j++)
 			{
@@ -261,7 +261,7 @@ namespace SvgRenderer {
 					break;
 				}
 			}
-		
+
 			if (nextTile != nullptr)
 			{
 				// If the winding is nonzero, span the whole tile
