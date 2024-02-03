@@ -9,6 +9,8 @@
 
 namespace SvgRenderer {
 
+	class PathRenderCmd;
+
 	constexpr float TOLERANCE = 0.1f;
 
 	struct Increment
@@ -48,6 +50,7 @@ namespace SvgRenderer {
 		void MoveTo(const glm::vec2& point);
 		void LineTo(const glm::vec2& p1);
 
+		void Command(const PathRenderCmd& command, const glm::vec2& lastPoint);
 		void Command(const PathCmd& command, const glm::vec2& lastPoint);
 
 		void Fill(uint32_t pathIndex);
