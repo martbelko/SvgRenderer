@@ -1,5 +1,6 @@
 #include "Rasterizer.h"
 
+#include "Renderer/Defs.h"
 #include "Renderer/Flattening.h"
 
 #include <cassert>
@@ -187,34 +188,44 @@ namespace SvgRenderer {
 		}
 	}
 
-	void Rasterizer::Fill(const std::vector<PathCmd>& path)
+	void Rasterizer::Fill(uint32_t pathIndex)
 	{
-		if (path.empty())
-		{
-			return;
-		}
+		const PathRender& path = Globals::AllPaths.paths[pathIndex];
 
 		glm::vec2 last = glm::vec2(0, 0);
-		for (const PathCmd& cmd : path)
+
+		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; ++i)
 		{
-			Command(cmd, last);
-			switch (cmd.type)
+			const PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
+			uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+			switch (pathType)
 			{
-			case PathCmdType::MoveTo:
-				last = cmd.as.moveTo.point;
+			case MOVE_TO:
+				Command(MoveToCmd{
+					.point = rndCmd.transformedPoints[0]
+					}, last);
+				last = rndCmd.transformedPoints[0];
 				break;
-			case PathCmdType::LineTo:
-				last = cmd.as.lineTo.p1;
+			case LINE_TO:
+				Command(LineToCmd{
+					.p1 = rndCmd.transformedPoints[0]
+					}, last);
+				last = rndCmd.transformedPoints[0];
 				break;
-			case PathCmdType::QuadTo:
-				last = cmd.as.quadTo.p2;
+			case QUAD_TO:
+				Command(QuadToCmd{
+					.p1 = rndCmd.transformedPoints[0],
+					.p2 = rndCmd.transformedPoints[1],
+					}, last);
+				last = rndCmd.transformedPoints[1];
 				break;
-			case PathCmdType::CubicTo:
-				last = cmd.as.cubicTo.p3;
-				break;
-			default:
-				// TODO: Add others
-				assert(false);
+			case CUBIC_TO:
+				Command(CubicToCmd{
+					.p1 = rndCmd.transformedPoints[0],
+					.p2 = rndCmd.transformedPoints[1],
+					.p3 = rndCmd.transformedPoints[2],
+					}, last);
+				last = rndCmd.transformedPoints[2];
 				break;
 			}
 		}

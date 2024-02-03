@@ -50,7 +50,7 @@ namespace SvgRenderer {
 
 		void Command(const PathCmd& command, const glm::vec2& lastPoint);
 
-		void Fill(const std::vector<PathCmd>& path);
+		void Fill(uint32_t pathIndex);
 		void Stroke(const std::vector<PathCmd>& path, float width, const glm::mat3& transform);
 
 		void Finish(TileBuilder& builder);

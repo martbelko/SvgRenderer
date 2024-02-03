@@ -32,16 +32,6 @@
 
 namespace SvgRenderer {
 
-#define MOVE_TO 0
-#define LINE_TO 1
-#define QUAD_TO 2
-#define CUBIC_TO 3
-
-#define GET_CMD_PATH_INDEX(value) (value >> 16)
-#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
-#define MAKE_CMD_PATH_INDEX(value, index) ((index << 16) | (value & 0x0000FFFF))
-#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0x0000FF00))
-
 	constexpr uint32_t SCREEN_WIDTH = 1900;
 	constexpr uint32_t SCREEN_HEIGHT = 1000;
 
@@ -249,43 +239,13 @@ namespace SvgRenderer {
 		}
 #endif
 		// 2.step: The rest
-		for (const PathRender& path : Globals::AllPaths.paths)
+		// for (const PathRender& path : Globals::AllPaths.paths)
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
 		{
-			std::vector<PathCmd> cmds;
-			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; ++i)
-			{
-				const PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
-				uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
-				switch (pathType)
-				{
-				case MOVE_TO:
-					cmds.emplace_back(MoveToCmd{
-						.point = rndCmd.transformedPoints[0]
-						});
-					break;
-				case LINE_TO:
-					cmds.emplace_back(LineToCmd{
-						.p1 = rndCmd.transformedPoints[0]
-						});
-					break;
-				case QUAD_TO:
-					cmds.emplace_back(QuadToCmd{
-						.p1 = rndCmd.transformedPoints[0],
-						.p2 = rndCmd.transformedPoints[1],
-						});
-					break;
-				case CUBIC_TO:
-					cmds.emplace_back(CubicToCmd{
-						.p1 = rndCmd.transformedPoints[0],
-						.p2 = rndCmd.transformedPoints[1],
-						.p3 = rndCmd.transformedPoints[2],
-						});
-					break;
-				}
-			}
+			const PathRender& path = Globals::AllPaths.paths[pathIndex];
 
 			Rasterizer rast(SCREEN_WIDTH, SCREEN_HEIGHT);
-			rast.Fill(cmds);
+			rast.Fill(pathIndex);
 
 			m_TileBuilder.color = path.color;
 			rast.Finish(m_TileBuilder);

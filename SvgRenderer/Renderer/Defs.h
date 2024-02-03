@@ -6,6 +6,16 @@
 
 namespace SvgRenderer {
 
+	#define MOVE_TO 0
+	#define LINE_TO 1
+	#define QUAD_TO 2
+	#define CUBIC_TO 3
+
+	#define GET_CMD_PATH_INDEX(value) (value >> 16)
+	#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
+	#define MAKE_CMD_PATH_INDEX(value, index) ((index << 16) | (value & 0x0000FFFF))
+	#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0x0000FF00))
+
 	struct PathRender
 	{
 		uint32_t startCmdIndex;

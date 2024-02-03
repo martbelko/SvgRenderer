@@ -15,7 +15,7 @@ namespace SvgRenderer::Flattening {
 		case PathCmdType::QuadTo:
 		{
 			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * cmd.as.quadTo.p1 + cmd.as.quadTo.p2)));
-			return 1.0f / dt;
+			return glm::ceil(1.0f / dt);
 		}
 		case PathCmdType::CubicTo:
 		{
@@ -23,7 +23,7 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2 b = 3.0f * (last - 2.0f * cmd.as.cubicTo.p1 + cmd.as.cubicTo.p2);
 			const float conc = glm::max(glm::length(b), glm::length(a + b));
 			const float dt = glm::sqrt((glm::sqrt(8.0f) * tolerance) / conc);
-			return 1.0f / dt;
+			return glm::ceil(1.0f / dt);
 		}
 		case PathCmdType::ConicTo:
 			// TODO: Implement
@@ -36,12 +36,17 @@ namespace SvgRenderer::Flattening {
 			assert(false && "Unknown path type");
 			break;
 		}
+
+		return 0;
 	}
 
 	std::vector<PathCmd> Flatten(const PathCmd& cmd, glm::vec2 last, float tolerance)
 	{
 		// TODO: Make this contained struct maybe a bit different, because it may only contain MoveTo and LineTo
+		int32_t expectedSize = CalculateNumberOfSegments(cmd, last, tolerance);
+
 		std::vector<PathCmd> simplePaths;
+		simplePaths.reserve(expectedSize);
 
 		switch (cmd.type)
 		{
@@ -99,6 +104,7 @@ namespace SvgRenderer::Flattening {
 			break;
 		}
 
+		assert(simplePaths.size() == expectedSize);
 		return simplePaths;
 	}
 
