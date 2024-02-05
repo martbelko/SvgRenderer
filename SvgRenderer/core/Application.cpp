@@ -15,6 +15,7 @@
 #include "Renderer/UniformBuffer.h"
 
 #include "Renderer/Defs.h"
+#include "Renderer/Flattening.h"
 
 #include "Scene/OrthographicCamera.h"
 
@@ -238,14 +239,82 @@ namespace SvgRenderer {
 			TransformPath(pathIndex);
 		}
 #endif
-		// 2.step: The rest
+		// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
+		uint32_t simpleCommandsCount = 0;
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+		{
+			const PathRender& path = Globals::AllPaths.paths[pathIndex];
+
+			glm::vec2 last = glm::vec2(0, 0);
+			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
+			{
+				PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
+				uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
+
+				uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+				switch (pathType)
+				{
+				case MOVE_TO:
+					last = rndCmd.transformedPoints[0];
+					break;
+				case LINE_TO:
+					last = rndCmd.transformedPoints[0];
+					break;
+				case QUAD_TO:
+					last = rndCmd.transformedPoints[1];
+					break;
+				case CUBIC_TO:
+					last = rndCmd.transformedPoints[2];
+					break;
+				}
+
+				rndCmd.startIndexSimpleCommands = simpleCommandsCount;
+				simpleCommandsCount += count;
+				rndCmd.endIndexSimpleCommands = simpleCommandsCount - 1;
+			}
+		}
+
+		Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
+
+		// 3.step: Simplify the commands and store in the array
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+		{
+			const PathRender& path = Globals::AllPaths.paths[pathIndex];
+
+			glm::vec2 last = glm::vec2(0, 0);
+			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
+			{
+				PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
+				Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
+
+				uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+				switch (pathType)
+				{
+				case MOVE_TO:
+					last = rndCmd.transformedPoints[0];
+					break;
+				case LINE_TO:
+					last = rndCmd.transformedPoints[0];
+					break;
+				case QUAD_TO:
+					last = rndCmd.transformedPoints[1];
+					break;
+				case CUBIC_TO:
+					last = rndCmd.transformedPoints[2];
+					break;
+				}
+			}
+		}
+
+		// 4.step: The rest
 		// for (const PathRender& path : Globals::AllPaths.paths)
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
 
 			Rasterizer rast(SCREEN_WIDTH, SCREEN_HEIGHT);
-			rast.Fill(pathIndex);
+			// rast.Fill(pathIndex);
+			rast.FillFromArray(pathIndex);
 
 			m_TileBuilder.color = path.color;
 			rast.Finish(m_TileBuilder);

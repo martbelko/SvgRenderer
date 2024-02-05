@@ -54,6 +54,8 @@ namespace SvgRenderer {
 			CloseCmd close;
 		} as;
 
+		PathCmd() = default;
+
 		PathCmd(const MoveToCmd& cmd)
 			: type(PathCmdType::MoveTo), as(CmdAs{ .moveTo = cmd }) {}
 		PathCmd(const LineToCmd& cmd)

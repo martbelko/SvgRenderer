@@ -14,7 +14,13 @@ namespace SvgRenderer {
 	#define GET_CMD_PATH_INDEX(value) (value >> 16)
 	#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
 	#define MAKE_CMD_PATH_INDEX(value, index) ((index << 16) | (value & 0x0000FFFF))
-	#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0x0000FF00))
+	#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0xFFFF00FF))
+
+	struct SimpleCommand // Lines or moves only
+	{
+		uint32_t cmdType;
+		glm::vec2 point;
+	};
 
 	struct PathRender
 	{
@@ -28,6 +34,8 @@ namespace SvgRenderer {
 	struct PathRenderCmd
 	{
 		uint32_t pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
+		uint32_t startIndexSimpleCommands;
+		uint32_t endIndexSimpleCommands;
 		std::array<glm::vec2, 3> points; // Maybe unused, but maximum 3 points for cubicTo
 		std::array<glm::vec2, 3> transformedPoints; // Maybe unused, but maximum 3 points for cubicTo
 	};
@@ -36,8 +44,7 @@ namespace SvgRenderer {
 	{
 		std::vector<PathRender> paths;
 		std::vector<PathRenderCmd> commands;
-		std::vector<uint32_t> numOfSegments; // Specific for each path, size of paths + 1, first number will be zero
-		std::vector<uint32_t> positions;
+		std::vector<PathCmd> simpleCommands;
 	};
 
 	class Globals
