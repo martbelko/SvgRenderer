@@ -279,13 +279,13 @@ namespace SvgRenderer {
 		// 3.step: Simplify the commands and store in the array
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
-			const PathRender& path = Globals::AllPaths.paths[pathIndex];
+			PathRender& path = Globals::AllPaths.paths[pathIndex];
 
 			glm::vec2 last = glm::vec2(0, 0);
 			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
 			{
 				PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
-				Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
+				path.bbox = Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
 
 				uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
 				switch (pathType)

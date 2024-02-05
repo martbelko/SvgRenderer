@@ -3,6 +3,8 @@
 #include "Renderer/TileBuilder.h"
 #include "Renderer/Path.h"
 
+#include "Utils/BoundingBox.h"
+
 #include <glm/glm.hpp>
 
 #include <array>

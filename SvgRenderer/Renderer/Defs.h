@@ -18,7 +18,7 @@ namespace SvgRenderer {
 
 	struct SimpleCommand // Lines or moves only
 	{
-		uint32_t cmdType;
+		uint32_t type;
 		glm::vec2 point;
 	};
 
@@ -44,7 +44,7 @@ namespace SvgRenderer {
 	{
 		std::vector<PathRender> paths;
 		std::vector<PathRenderCmd> commands;
-		std::vector<PathCmd> simpleCommands;
+		std::vector<SimpleCommand> simpleCommands;
 	};
 
 	class Globals

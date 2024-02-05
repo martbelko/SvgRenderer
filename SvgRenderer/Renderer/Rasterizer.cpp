@@ -34,7 +34,7 @@ namespace SvgRenderer {
 					.winding = 0,
 					.hasIncrements = false,
 					.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
-					});
+				});
 
 				Tile& tile = tiles.back();
 				for (int32_t relativeY = 0; relativeY < TILE_SIZE; relativeY++)
@@ -172,14 +172,14 @@ namespace SvgRenderer {
 	{
 		for (uint32_t i = cmd.startIndexSimpleCommands; i <= cmd.endIndexSimpleCommands; i++)
 		{
-			const PathCmd& simpleCmd = Globals::AllPaths.simpleCommands[i];
+			const SimpleCommand& simpleCmd = Globals::AllPaths.simpleCommands[i];
 			switch (simpleCmd.type)
 			{
-			case PathCmdType::MoveTo:
-				this->MoveTo(simpleCmd.as.moveTo.point);
+			case MOVE_TO:
+				this->MoveTo(simpleCmd.point);
 				break;
-			case PathCmdType::LineTo:
-				this->LineTo(simpleCmd.as.lineTo.p1);
+			case LINE_TO:
+				this->LineTo(simpleCmd.point);
 				break;
 			default:
 				assert(false && "Only moves and lines");

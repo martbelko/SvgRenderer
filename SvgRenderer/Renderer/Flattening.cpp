@@ -75,18 +75,21 @@ namespace SvgRenderer::Flattening {
 		return 0;
 	}
 
-	void FlattenIntoArray(const PathRenderCmd& cmd, glm::vec2 last, float tolerance)
+	BoundingBox FlattenIntoArray(const PathRenderCmd& cmd, glm::vec2 last, float tolerance)
 	{
 		uint32_t index = cmd.startIndexSimpleCommands;
 
+		BoundingBox bbox;
 		uint32_t pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
 		switch (pathType)
 		{
 		case MOVE_TO:
-			Globals::AllPaths.simpleCommands[index] = MoveToCmd{ .point = cmd.transformedPoints[0] };
+			Globals::AllPaths.simpleCommands[index] = SimpleCommand{ .type = MOVE_TO, .point = cmd.transformedPoints[0] };
+			bbox.AddPoint(cmd.transformedPoints[0]);
 			break;
 		case LINE_TO:
-			Globals::AllPaths.simpleCommands[index] = LineToCmd{ .p1 = cmd.transformedPoints[0] };
+			Globals::AllPaths.simpleCommands[index] = SimpleCommand{ .type = LINE_TO, .point = cmd.transformedPoints[0] };
+			bbox.AddPoint(cmd.transformedPoints[0]);
 			break;
 		case QUAD_TO:
 		{
@@ -102,7 +105,8 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p12 = glm::lerp(p1, p2, t);
 				const glm::vec2 p1 = glm::lerp(p01, p12, t);
 
-				Globals::AllPaths.simpleCommands[index++] = LineToCmd{ .p1 = p1 };
+				Globals::AllPaths.simpleCommands[index++] = SimpleCommand{ .type = LINE_TO, .point = p1 };
+				bbox.AddPoint(p1);
 			}
 
 			break;
@@ -128,7 +132,8 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p123 = glm::lerp(p12, p23, t);
 				const glm::vec2 p1 = glm::lerp(p012, p123, t);
 
-				Globals::AllPaths.simpleCommands[index++] = LineToCmd{ .p1 = p1 };
+				Globals::AllPaths.simpleCommands[index++] = SimpleCommand{ .type = LINE_TO, .point = p1 };
+				bbox.AddPoint(p1);
 			}
 
 			break;
@@ -137,6 +142,8 @@ namespace SvgRenderer::Flattening {
 			//assert(false && "Unknown path type");
 			break;
 		}
+
+		return bbox;
 	}
 
 	std::vector<PathCmd> Flatten(const PathRenderCmd& cmd, glm::vec2 last, float tolerance)
