@@ -285,7 +285,8 @@ namespace SvgRenderer {
 			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
 			{
 				PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
-				path.bbox = Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
+				BoundingBox bbox = Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
+				path.bbox = BoundingBox::Merge(path.bbox, bbox);
 
 				uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
 				switch (pathType)
@@ -304,6 +305,8 @@ namespace SvgRenderer {
 					break;
 				}
 			}
+
+			path.bbox.AddPadding({ 1.0f, 1.0f });
 		}
 
 		// 4.step: The rest

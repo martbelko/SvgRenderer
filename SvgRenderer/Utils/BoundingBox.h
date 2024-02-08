@@ -16,6 +16,22 @@ namespace SvgRenderer {
 			min = glm::min(min, point);
 			max = glm::max(max, point);
 		}
+
+		void AddPadding(const glm::vec2& padding)
+		{
+			min.x -= padding.x;
+			max.x += padding.x;
+			min.y -= padding.y;
+			max.y += padding.y;
+		}
+
+		static BoundingBox Merge(const BoundingBox& bbox1, const BoundingBox& bbox2)
+		{
+			return BoundingBox{
+				.min = glm::min(bbox1.min, bbox2.min),
+				.max = glm::max(bbox1.max, bbox2.max)
+			};
+		}
 	};
 
 }

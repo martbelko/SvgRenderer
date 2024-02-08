@@ -34,13 +34,21 @@ namespace SvgRenderer {
 	class Rasterizer
 	{
 	public:
+		Rasterizer(const BoundingBox& bbox);
 		Rasterizer(uint32_t windowWidth, uint32_t windowHeight);
 
-		Tile& GetTile(int x, int y) { return tiles[y * m_TileCountX + x]; }
+		Tile& GetTile(int x, int y) { return tiles[GetTileIndex(x, y)]; }
 
-		size_t GetTileIndex(int x, int y) const { return y * m_TileCountX + x; }
+		size_t GetTileIndex(int x, int y) const
+		{
+			int32_t offsetX = x - m_TileStartX;
+			int32_t offsetY = y - m_TileStartY;
+			return offsetY * m_TileCountX + offsetX;
+		}
 
 		uint32_t m_Width, m_Height;
+
+		int32_t m_TileStartX, m_TileStartY;
 		uint32_t m_TileCountX, m_TileCountY;
 
 		std::vector<Tile> tiles;

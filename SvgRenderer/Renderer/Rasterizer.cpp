@@ -16,9 +16,57 @@ namespace SvgRenderer {
 		return 0;
 	}
 
+	Rasterizer::Rasterizer(const BoundingBox& bbox)
+	{
+		const int32_t minBboxCoordX = glm::floor(bbox.min.x);
+		const int32_t minBboxCoordY = glm::floor(bbox.min.y);
+		const int32_t maxBboxCoordX = glm::ceil(bbox.max.x);
+		const int32_t maxBboxCoordY = glm::ceil(bbox.max.y);
+
+		const int32_t minTileCoordX = minBboxCoordX / TILE_SIZE;
+		const int32_t minTileCoordY = minBboxCoordY / TILE_SIZE;
+		const int32_t maxTileCoordX = maxBboxCoordX / TILE_SIZE;
+		const int32_t maxTileCoordY = maxBboxCoordY / TILE_SIZE;
+
+		m_TileStartX = minTileCoordX;
+		m_TileStartY = minTileCoordY;
+		m_TileCountX = maxTileCoordX - minTileCoordX;
+		m_TileCountY = maxTileCoordY - minTileCoordY;
+		const uint32_t tileCount = m_TileCountX * m_TileCountY;
+
+		tiles.reserve(tileCount);
+		for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
+		{
+			for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
+			{
+				tiles.push_back(Tile{
+					.tileX = x,
+					.tileY = y,
+					.winding = 0,
+					.hasIncrements = false,
+					.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
+				});
+
+				Tile& tile = tiles.back();
+				for (int32_t relativeY = 0; relativeY < TILE_SIZE; relativeY++)
+				{
+					for (int32_t relativeX = 0; relativeX < TILE_SIZE; relativeX++)
+					{
+						tile.increments[relativeY * TILE_SIZE + relativeX].x = relativeX;
+						tile.increments[relativeY * TILE_SIZE + relativeX].y = relativeY;
+						tile.increments[relativeY * TILE_SIZE + relativeX].area = 0;
+						tile.increments[relativeY * TILE_SIZE + relativeX].height = 0;
+					}
+				}
+			}
+		}
+	}
+
 	Rasterizer::Rasterizer(uint32_t windowWidth, uint32_t windowHeight)
 		: m_Width(windowWidth), m_Height(windowHeight)
 	{
+		m_TileStartX = 0;
+		m_TileStartY = 0;
 		m_TileCountX = std::ceil(static_cast<float>(m_Width) / TILE_SIZE);
 		m_TileCountY = std::ceil(static_cast<float>(m_Height) / TILE_SIZE);
 		uint32_t tileCount = m_TileCountX * m_TileCountY;
@@ -351,7 +399,9 @@ namespace SvgRenderer {
 		{
 			const Tile& tile = filteredTiles[i];
 			if (!tile.hasIncrements)
+			{
 				continue;
+			}
 
 			for (int32_t y = 0; y < TILE_SIZE; y++)
 			{
