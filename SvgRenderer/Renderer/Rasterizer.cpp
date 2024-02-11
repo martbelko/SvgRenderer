@@ -63,43 +63,6 @@ namespace SvgRenderer {
 		}
 	}
 
-	Rasterizer::Rasterizer(uint32_t windowWidth, uint32_t windowHeight)
-		: m_Width(windowWidth), m_Height(windowHeight)
-	{
-		m_TileStartX = 0;
-		m_TileStartY = 0;
-		m_TileCountX = glm::ceil(static_cast<float>(m_Width) / TILE_SIZE);
-		m_TileCountY = glm::ceil(static_cast<float>(m_Height) / TILE_SIZE);
-		uint32_t tileCount = m_TileCountX * m_TileCountY;
-
-		tiles.reserve(tileCount);
-		for (int32_t y = 0; y < m_TileCountY; ++y)
-		{
-			for (int32_t x = 0; x < m_TileCountX; ++x)
-			{
-				tiles.push_back(Tile{
-					.tileX = x,
-					.tileY = y,
-					.winding = 0,
-					.hasIncrements = false,
-					.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
-				});
-
-				Tile& tile = tiles.back();
-				for (int32_t relativeY = 0; relativeY < TILE_SIZE; relativeY++)
-				{
-					for (int32_t relativeX = 0; relativeX < TILE_SIZE; relativeX++)
-					{
-						tile.increments[relativeY * TILE_SIZE + relativeX].x = relativeX;
-						tile.increments[relativeY * TILE_SIZE + relativeX].y = relativeY;
-						tile.increments[relativeY * TILE_SIZE + relativeX].area = 0;
-						tile.increments[relativeY * TILE_SIZE + relativeX].height = 0;
-					}
-				}
-			}
-		}
-	}
-
 	void Rasterizer::MoveTo(const glm::vec2& point)
 	{
 		if (last != first)
@@ -237,47 +200,6 @@ namespace SvgRenderer {
 		}
 	}
 
-	void Rasterizer::Command(const PathRenderCmd& command, const glm::vec2& lastPoint)
-	{
-		auto simpleCommands = Flattening::Flatten(command, lastPoint, TOLERANCE);
-
-		for (const auto& cmd : simpleCommands)
-		{
-			switch (cmd.type)
-			{
-			case PathCmdType::MoveTo:
-				this->MoveTo(cmd.as.moveTo.point);
-				break;
-			case PathCmdType::LineTo:
-				this->LineTo(cmd.as.lineTo.p1);
-				break;
-			default:
-				assert(false && "Only moves and lines");
-				break;
-			}
-		}
-	}
-
-	void Rasterizer::Command(const PathCmd& command, const glm::vec2& lastPoint)
-	{
-		auto simpleCommands = Flattening::Flatten(command, lastPoint, TOLERANCE);
-		for (const auto& cmd : simpleCommands)
-		{
-			switch (cmd.type)
-			{
-			case PathCmdType::MoveTo:
-				this->MoveTo(cmd.as.moveTo.point);
-				break;
-			case PathCmdType::LineTo:
-				this->LineTo(cmd.as.lineTo.p1);
-				break;
-			default:
-				assert(false && "Only moves and lines");
-				break;
-			}
-		}
-	}
-
 	void Rasterizer::FillFromArray(uint32_t pathIndex)
 	{
 		const PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -287,35 +209,6 @@ namespace SvgRenderer {
 		{
 			const PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
 			CommandFromArray(rndCmd, last);
-
-			uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
-			switch (pathType)
-			{
-			case MOVE_TO:
-				last = rndCmd.transformedPoints[0];
-				break;
-			case LINE_TO:
-				last = rndCmd.transformedPoints[0];
-				break;
-			case QUAD_TO:
-				last = rndCmd.transformedPoints[1];
-				break;
-			case CUBIC_TO:
-				last = rndCmd.transformedPoints[2];
-				break;
-			}
-		}
-	}
-
-	void Rasterizer::Fill(uint32_t pathIndex)
-	{
-		const PathRender& path = Globals::AllPaths.paths[pathIndex];
-
-		glm::vec2 last = glm::vec2(0, 0);
-		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
-		{
-			const PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
-			Command(rndCmd, last);
 
 			uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
 			switch (pathType)

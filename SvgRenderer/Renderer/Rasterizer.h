@@ -35,7 +35,6 @@ namespace SvgRenderer {
 	{
 	public:
 		Rasterizer(const BoundingBox& bbox);
-		Rasterizer(uint32_t windowWidth, uint32_t windowHeight);
 
 		Tile& GetTileFromRelativePos(int32_t x, int32_t y) { return tiles[GetTileIndexFromRelativePos(x, y)]; }
 		Tile& GetTileFromWindowPos(int32_t x, int32_t y) { return tiles[GetTileIndexFromWindowPos(x, y)]; }
@@ -66,10 +65,6 @@ namespace SvgRenderer {
 		void LineTo(const glm::vec2& p1);
 
 		void CommandFromArray(const PathRenderCmd& command, const glm::vec2& lastPoint);
-		void Command(const PathRenderCmd& command, const glm::vec2& lastPoint);
-		void Command(const PathCmd& command, const glm::vec2& lastPoint);
-
-		void Fill(uint32_t pathIndex);
 		void FillFromArray(uint32_t pathIndex);
 		void Stroke(const std::vector<PathCmd>& path, float width, const glm::mat3& transform);
 
