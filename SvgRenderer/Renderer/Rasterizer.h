@@ -37,14 +37,19 @@ namespace SvgRenderer {
 		Rasterizer(const BoundingBox& bbox);
 		Rasterizer(uint32_t windowWidth, uint32_t windowHeight);
 
-		Tile& GetTile(int x, int y) { return tiles[GetTileIndex(x, y)]; }
+		Tile& GetTileFromRelativePos(int32_t x, int32_t y) { return tiles[GetTileIndexFromRelativePos(x, y)]; }
+		Tile& GetTileFromWindowPos(int32_t x, int32_t y) { return tiles[GetTileIndexFromWindowPos(x, y)]; }
 
-		size_t GetTileIndex(int x, int y) const
+		uint32_t GetTileIndexFromRelativePos(int32_t x, int32_t y) const { return y * m_TileCountX + x; }
+		uint32_t GetTileIndexFromWindowPos(int32_t x, int32_t y) const
 		{
-			int32_t offsetX = x - m_TileStartX;
-			int32_t offsetY = y - m_TileStartY;
+			int32_t offsetX = x / TILE_SIZE - m_TileStartX;
+			int32_t offsetY = y / TILE_SIZE - m_TileStartY;
 			return offsetY * m_TileCountX + offsetX;
 		}
+
+		uint32_t GetTileCoordX(int32_t windowPosX) const { return windowPosX / TILE_SIZE - m_TileStartX; }
+		uint32_t GetTileCoordY(int32_t windowPosY) const { return windowPosY / TILE_SIZE - m_TileStartY; }
 
 		uint32_t m_Width, m_Height;
 

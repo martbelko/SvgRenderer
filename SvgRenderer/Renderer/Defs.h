@@ -3,6 +3,7 @@
 #include "Utils/BoundingBox.h"
 
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace SvgRenderer {
 
@@ -50,7 +51,7 @@ namespace SvgRenderer {
 	class Globals
 	{
 	public:
-		inline static glm::mat4 GlobalTransform = glm::mat4(1.0f);
+		inline static glm::mat4 GlobalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(10, 10, 0));
 		inline static PathsContainer AllPaths;
 	};
 

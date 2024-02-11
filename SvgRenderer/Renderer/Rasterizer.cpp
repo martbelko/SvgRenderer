@@ -25,16 +25,17 @@ namespace SvgRenderer {
 
 		const int32_t minTileCoordX = minBboxCoordX / TILE_SIZE;
 		const int32_t minTileCoordY = minBboxCoordY / TILE_SIZE;
-		const int32_t maxTileCoordX = maxBboxCoordX / TILE_SIZE;
-		const int32_t maxTileCoordY = maxBboxCoordY / TILE_SIZE;
+		const int32_t maxTileCoordX = glm::ceil(static_cast<float>(maxBboxCoordX) / TILE_SIZE);
+		const int32_t maxTileCoordY = glm::ceil(static_cast<float>(maxBboxCoordY) / TILE_SIZE);
 
 		m_TileStartX = minTileCoordX;
 		m_TileStartY = minTileCoordY;
-		m_TileCountX = maxTileCoordX - minTileCoordX;
-		m_TileCountY = maxTileCoordY - minTileCoordY;
-		const uint32_t tileCount = m_TileCountX * m_TileCountY;
+		m_TileCountX = maxTileCoordX - minTileCoordX + 1;
+		m_TileCountY = maxTileCoordY - minTileCoordY + 1;
 
+		const uint32_t tileCount = m_TileCountX * m_TileCountY;
 		tiles.reserve(tileCount);
+
 		for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
 		{
 			for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
@@ -67,8 +68,8 @@ namespace SvgRenderer {
 	{
 		m_TileStartX = 0;
 		m_TileStartY = 0;
-		m_TileCountX = std::ceil(static_cast<float>(m_Width) / TILE_SIZE);
-		m_TileCountY = std::ceil(static_cast<float>(m_Height) / TILE_SIZE);
+		m_TileCountX = glm::ceil(static_cast<float>(m_Width) / TILE_SIZE);
+		m_TileCountY = glm::ceil(static_cast<float>(m_Height) / TILE_SIZE);
 		uint32_t tileCount = m_TileCountX * m_TileCountY;
 
 		tiles.reserve(tileCount);
@@ -108,7 +109,7 @@ namespace SvgRenderer {
 
 		first = point;
 		last = point;
-		prevTileY = glm::floor(point.y) / TILE_SIZE;
+		prevTileY = GetTileCoordY(glm::floor(point.y));
 	}
 
 	void Rasterizer::LineTo(const glm::vec2& point)
@@ -132,7 +133,7 @@ namespace SvgRenderer {
 			else
 			{
 				float nextY = point.y > last.y ? y + 1 : y;
-				rowt1 = std::min((dtdy * (nextY - last.y)), 1.0f);
+				rowt1 = glm::min((dtdy * (nextY - last.y)), 1.0f);
 			}
 
 			float colt1;
@@ -143,16 +144,16 @@ namespace SvgRenderer {
 			else
 			{
 				float nextX = point.x > last.x ? x + 1 : x;
-				colt1 = std::min((dtdx * (nextX - last.x)), 1.0f);
+				colt1 = glm::min((dtdx * (nextX - last.x)), 1.0f);
 			}
 
-			float xStep = std::abs(dtdx);
-			float yStep = std::abs(dtdy);
+			float xStep = glm::abs(dtdx);
+			float yStep = glm::abs(dtdy);
 
 			while (true)
 			{
-				float t0 = std::max(rowt0, colt0);
-				float t1 = std::min(rowt1, colt1);
+				float t0 = glm::max(rowt0, colt0);
+				float t1 = glm::min(rowt1, colt1);
 				glm::vec2 p0 = (1.0f - t0) * last + t0 * point;
 				glm::vec2 p1 = (1.0f - t1) * last + t1 * point;
 				float height = p1.y - p0.y;
@@ -162,21 +163,21 @@ namespace SvgRenderer {
 				int32_t relativeX = x % TILE_SIZE;
 				int32_t relativeY = y % TILE_SIZE;
 
-				GetTile(x / TILE_SIZE, y / TILE_SIZE).increments[relativeY * TILE_SIZE + relativeX].area += area;
-				GetTile(x / TILE_SIZE, y / TILE_SIZE).increments[relativeY * TILE_SIZE + relativeX].height += height;
-				GetTile(x / TILE_SIZE, y / TILE_SIZE).hasIncrements = true;
+				GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].area += area;
+				GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].height += height;
+				GetTileFromWindowPos(x, y).hasIncrements = true;
 
 				// Advance to the next scanline
 				if (rowt1 < colt1)
 				{
 					rowt0 = rowt1;
-					rowt1 = std::min((rowt1 + yStep), 1.0f);
+					rowt1 = glm::min((rowt1 + yStep), 1.0f);
 					y += yDir;
 				}
 				else
 				{
 					colt0 = colt1;
-					colt1 = std::min((colt1 + xStep), 1.0f);
+					colt1 = glm::min((colt1 + xStep), 1.0f);
 					x += xDir;
 				}
 
@@ -188,15 +189,15 @@ namespace SvgRenderer {
 				}
 
 				// Handle tile boundaries
-				int32_t tileY = y / TILE_SIZE;
+				int32_t tileY = GetTileCoordY(y);
 				if (tileY != prevTileY)
 				{
-					int32_t v1 = x / TILE_SIZE; // Find out which tile index on x-axis are we on
+					int32_t v1 = GetTileCoordX(x); // Find out which tile index on x-axis are we on
 					int8_t v2 = tileY - prevTileY; // Are we moving from top to bottom, or bottom to top? (1 = from lower tile to higher tile, -1 = opposite)
 					uint32_t currentTileY = v2 == 1 ? prevTileY : tileY;
 
-					size_t currentIndex = std::max(std::min(GetTileIndex(v1, currentTileY), tiles.size() - 1), static_cast<size_t>(0));
-
+					// size_t currentIndex = glm::max(glm::min(GetTileIndexFromRelativePos(v1, currentTileY), static_cast<uint32_t>(tiles.size() - 1)), 0u);
+					size_t currentIndex = GetTileIndexFromRelativePos(v1, currentTileY);
 					for (size_t i = 0; i < currentIndex; i++)
 					{
 						tiles[i].winding += v2;
@@ -383,7 +384,7 @@ namespace SvgRenderer {
 			if (nextTile != nullptr)
 			{
 				// If the winding is nonzero, span the whole tile
-				if (GetTile(tile.tileX, tile.tileY).winding != 0)
+				if (GetTileFromRelativePos(tile.tileX - m_TileStartX, tile.tileY - m_TileStartY).winding != 0)
 				{
 					int32_t width = nextTile->tileX - tile.tileX - 1;
 					builder.Span((tile.tileX + 1) * TILE_SIZE, tile.tileY * TILE_SIZE, width * TILE_SIZE);
