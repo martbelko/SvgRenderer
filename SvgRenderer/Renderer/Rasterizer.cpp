@@ -159,8 +159,7 @@ namespace SvgRenderer {
 					int8_t v2 = tileY - prevTileY; // Are we moving from top to bottom, or bottom to top? (1 = from lower tile to higher tile, -1 = opposite)
 					uint32_t currentTileY = v2 == 1 ? prevTileY : tileY;
 
-					// size_t currentIndex = glm::max(glm::min(GetTileIndexFromRelativePos(v1, currentTileY), static_cast<uint32_t>(tiles.size() - 1)), 0u);
-					size_t currentIndex = GetTileIndexFromRelativePos(v1, currentTileY);
+					uint32_t currentIndex = glm::max(glm::min(GetTileIndexFromRelativePos(v1, currentTileY), static_cast<uint32_t>(tiles.size() - 1)), 0u);
 					for (size_t i = 0; i < currentIndex; i++)
 					{
 						tiles[i].winding += v2;
@@ -241,35 +240,20 @@ namespace SvgRenderer {
 			LineTo(first);
 		}
 
-		auto filterTiles = [&]()
+		for (size_t i = 0; i < tiles.size(); i++)
 		{
-			std::vector<Tile> result;
-			for (const Tile& tile : tiles)
-			{
-				if (tile.hasIncrements)
-				{
-					result.push_back(tile);
-				}
-			}
-
-			return result;
-		};
-		auto filteredTiles = filterTiles();
-
-		for (size_t i = 0; i < filteredTiles.size(); i++)
-		{
-			const Tile& tile = filteredTiles[i];
+			const Tile& tile = tiles[i];
 			if (!tile.hasIncrements)
 			{
 				continue;
 			}
 
 			Tile* nextTile = nullptr;
-			for (size_t j = i + 1; j < filteredTiles.size() && filteredTiles[j].tileY == tile.tileY; j++)
+			for (size_t j = i + 1; j < tiles.size() && tiles[j].tileY == tile.tileY; j++)
 			{
-				if (filteredTiles[j].hasIncrements)
+				if (tiles[j].hasIncrements)
 				{
-					nextTile = &filteredTiles[j];
+					nextTile = &tiles[j];
 					break;
 				}
 			}
@@ -289,9 +273,9 @@ namespace SvgRenderer {
 		std::array<float, TILE_SIZE * TILE_SIZE> heights{};
 		std::array<float, TILE_SIZE> coverage{};
 
-		for (size_t i = 0; i < filteredTiles.size(); ++i)
+		for (size_t i = 0; i < tiles.size(); ++i)
 		{
-			const Tile& tile = filteredTiles[i];
+			const Tile& tile = tiles[i];
 			if (!tile.hasIncrements)
 			{
 				continue;
@@ -331,11 +315,11 @@ namespace SvgRenderer {
 			std::fill(heights.begin(), heights.end(), 0.0f);
 
 			Tile* nextTile = nullptr; // Next active bin in the same y-coord, same as the previous one, could be optimized and only done once
-			for (size_t j = i + 1; j < filteredTiles.size() && filteredTiles[j].tileY == tile.tileY; ++j)
+			for (size_t j = i + 1; j < tiles.size() && tiles[j].tileY == tile.tileY; ++j)
 			{
-				if (filteredTiles[j].hasIncrements)
+				if (tiles[j].hasIncrements)
 				{
-					nextTile = &filteredTiles[j];
+					nextTile = &tiles[j];
 					break;
 				}
 			}

@@ -306,6 +306,7 @@ namespace SvgRenderer {
 				}
 			}
 
+			// Maybe add more padding?
 			path.bbox.AddPadding({ 1.0f, 1.0f });
 		}
 
@@ -315,10 +316,10 @@ namespace SvgRenderer {
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
 
-			m_TileBuilder.color = path.color;
-
 			Rasterizer rast(path.bbox);
 			rast.FillFromArray(pathIndex);
+
+			m_TileBuilder.color = path.color;
 			rast.Finish(m_TileBuilder);
 		}
 
