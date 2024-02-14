@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 
 #include <array>
+#include <mutex>
 
 namespace SvgRenderer {
 
@@ -39,6 +40,9 @@ namespace SvgRenderer {
 		Tile& GetTileFromRelativePos(int32_t x, int32_t y) { return tiles[GetTileIndexFromRelativePos(x, y)]; }
 		Tile& GetTileFromWindowPos(int32_t x, int32_t y) { return tiles[GetTileIndexFromWindowPos(x, y)]; }
 
+		const Tile& GetTileFromRelativePos(int32_t x, int32_t y) const { return tiles[GetTileIndexFromRelativePos(x, y)]; }
+		const Tile& GetTileFromWindowPos(int32_t x, int32_t y) const { return tiles[GetTileIndexFromWindowPos(x, y)]; }
+
 		uint32_t GetTileIndexFromRelativePos(int32_t x, int32_t y) const { return y * m_TileCountX + x; }
 		uint32_t GetTileIndexFromWindowPos(int32_t x, int32_t y) const
 		{
@@ -56,13 +60,10 @@ namespace SvgRenderer {
 		uint32_t m_TileCountX, m_TileCountY;
 
 		std::vector<Tile> tiles;
+		std::mutex tilesMutex;
+		std::mutex tilesMutex2;
 
-		glm::vec2 first = { 0.0f, 0.0f };
-		glm::vec2 last = { 0.0f, 0.0f };
-		int16_t prevTileY = 0;
-
-		void MoveTo(const glm::vec2& point);
-		void LineTo(const glm::vec2& p1);
+		void LineTo(glm::vec2 from, glm::vec2 to);
 
 		void CommandFromArray(const PathRenderCmd& command, const glm::vec2& lastPoint);
 		void FillFromArray(uint32_t pathIndex);

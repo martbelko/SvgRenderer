@@ -48,34 +48,61 @@ namespace SvgRenderer {
 		{
 			const SvgPath& path = node->as.path;
 
+			glm::vec2 first = { 0, 0 };
+			glm::vec2 last = { 0, 0 };
+
 			std::vector<PathCmd> cmds;
 			for (const SvgPath::Segment& seg : path.segments)
 			{
 				switch (seg.type)
 				{
 				case SvgPath::Segment::Type::MoveTo:
+				{
+					//if (last != first)
+					//{
+					//	cmds.push_back(PathCmd(LineToCmd{ .p1 = first }));
+					//}
+
 					cmds.push_back(PathCmd(MoveToCmd{ .point = seg.as.moveTo.p }));
+					first = seg.as.moveTo.p;
+					last = seg.as.moveTo.p;
 					break;
+				}
 				case SvgPath::Segment::Type::LineTo:
 					cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
-					break;
+					{
+						if (seg.as.lineTo.p != first)
+						{
+							cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
+						}
+
+						last = seg.as.lineTo.p;
+						break;
+					}
 				case SvgPath::Segment::Type::Close:
 					cmds.push_back(CloseCmd{});
+					last = first;
 					break;
 				case SvgPath::Segment::Type::QuadTo:
 					cmds.push_back(PathCmd(QuadToCmd{ .p1 = seg.as.quadTo.p1, .p2 = seg.as.quadTo.p2 }));
+					last = seg.as.quadTo.p2;
 					break;
 				case SvgPath::Segment::Type::CubicTo:
 					cmds.push_back(PathCmd(CubicToCmd{ .p1 = seg.as.cubicTo.p1, .p2 = seg.as.cubicTo.p2, .p3 = seg.as.cubicTo.p3 }));
+					last = seg.as.cubicTo.p3;
 					break;
-				// TODO: Implement others
+					// TODO: Implement others
 				}
+			}
+
+			// Only for FILL, not for STROKE
+			if (last != first)
+			{
+				cmds.push_back(PathCmd(LineToCmd{ .p1 = first }));
 			}
 
 			const SvgColor& c = path.fill.color;
 			builder.color = { c.r, c.g, c.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
-
-			glm::vec4 normColor = { c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, path.fill.opacity };
 
 			Globals::AllPaths.paths.push_back(PathRender{
 				.startCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size()),
@@ -149,38 +176,38 @@ namespace SvgRenderer {
 		}
 	}
 
+	static void TransformCurve(PathRenderCmd* cmd)
+	{
+		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd->pathIndexCmdType);
+		uint32_t cmdType = GET_CMD_TYPE(cmd->pathIndexCmdType);
+		switch (cmdType)
+		{
+		case MOVE_TO:
+		case LINE_TO:
+			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+			break;
+		case QUAD_TO:
+			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+			cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
+			break;
+		case CUBIC_TO:
+			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+			cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
+			cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
+			break;
+		}
+	}
+
 	static void TransformPathAsync(uint32_t pathIndex)
 	{
 		PathRender& path = Globals::AllPaths.paths[pathIndex];
-
-		auto transformCurve = [](PathRenderCmd* cmd)
-		{
-			uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd->pathIndexCmdType);
-			uint32_t cmdType = GET_CMD_TYPE(cmd->pathIndexCmdType);
-			switch (cmdType)
-			{
-			case MOVE_TO:
-			case LINE_TO:
-				cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-				break;
-			case QUAD_TO:
-				cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-				cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
-				break;
-			case CUBIC_TO:
-				cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-				cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
-				cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
-				break;
-			}
-		};
 
 		std::vector<std::future<void>> futures;
 		futures.reserve(path.endCmdIndex - path.startCmdIndex + 1);
 
 		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
 		{
-			futures.push_back(std::async(std::launch::async, transformCurve, &Globals::AllPaths.commands[i]));
+			futures.push_back(std::async(std::launch::async, TransformCurve, &Globals::AllPaths.commands[i]));
 		}
 
 		for (auto& f : futures)
@@ -210,7 +237,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -218,20 +245,19 @@ namespace SvgRenderer {
 
 		// Everything after this line may be done in each frame
 
-#define ASYNC 1
+#define ASYNC 0
 		// 1.step: Transform the paths
+		SR_TRACE("Applying transforms to {0} paths", Globals::AllPaths.paths.size());
 #if ASYNC == 1
-		std::vector<std::future<void>> futures;
-		futures.reserve(Globals::AllPaths.paths.size());
+		cb::ThreadPool pool(std::thread::hardware_concurrency());
 
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
-			futures.push_back(std::async(std::launch::async, TransformPathAsync, pathIndex));
-		}
-
-		for (auto& f : futures)
-		{
-			f.wait();
+			PathRender& path = Globals::AllPaths.paths[pathIndex];
+			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
+			{
+				pool.Schedule([i]() { TransformCurve(&Globals::AllPaths.commands[i]); });
+			}
 		}
 #else
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
@@ -277,6 +303,7 @@ namespace SvgRenderer {
 		Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
 
 		// 3.step: Simplify the commands and store in the array
+		SR_TRACE("Simplifying commands...");
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -306,12 +333,13 @@ namespace SvgRenderer {
 				}
 			}
 
-			// Maybe add more padding?
+			// TODO: Maybe add more padding?
 			path.bbox.AddPadding({ 1.0f, 1.0f });
 		}
 
 		// 4.step: The rest
-		// for (const PathRender& path : Globals::AllPaths.paths)
+		SR_TRACE("Doing the rest...");
+		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -321,17 +349,19 @@ namespace SvgRenderer {
 
 			m_TileBuilder.color = path.color;
 			rast.Finish(m_TileBuilder);
-		}
 
-		//for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
-		//{
-		//	TransformPath(pathIndex);
-		//}
-		//
-		//for (const PathRender& path : Globals::AllPaths.paths)
-		//{
-		//	CalculateNumberOfSegments(path);
-		//}
+			if (++total % 1000 == 0)
+			{
+				SR_TRACE("Processed {0} paths", total);
+			}
+
+			if (total == 46834)
+			{
+				total += 10;
+				pathIndex += 10;
+			}
+		}
+		SR_TRACE("Done");
 	}
 
 	void Application::Shutdown()
