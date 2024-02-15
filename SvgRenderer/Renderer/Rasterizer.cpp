@@ -1,12 +1,9 @@
 #include "Rasterizer.h"
 
-#include "Core/ThreadPool.h"
-
 #include "Renderer/Defs.h"
 #include "Renderer/Flattening.h"
 
 #include <cassert>
-#include <execution>
 
 namespace SvgRenderer {
 
@@ -26,8 +23,8 @@ namespace SvgRenderer {
 		const int32_t maxBboxCoordX = glm::ceil(bbox.max.x);
 		const int32_t maxBboxCoordY = glm::ceil(bbox.max.y);
 
-		const int32_t minTileCoordX = minBboxCoordX / TILE_SIZE;
-		const int32_t minTileCoordY = minBboxCoordY / TILE_SIZE;
+		const int32_t minTileCoordX = glm::floor(static_cast<float>(minBboxCoordX) / TILE_SIZE);
+		const int32_t minTileCoordY = glm::floor(static_cast<float>(minBboxCoordY) / TILE_SIZE);
 		const int32_t maxTileCoordX = glm::ceil(static_cast<float>(maxBboxCoordX) / TILE_SIZE);
 		const int32_t maxTileCoordY = glm::ceil(static_cast<float>(maxBboxCoordY) / TILE_SIZE);
 
@@ -66,41 +63,51 @@ namespace SvgRenderer {
 		}
 	}
 
-	void Rasterizer::LineTo(glm::vec2 from, glm::vec2 point)
+	void Rasterizer::MoveTo(const glm::vec2& point)
 	{
-		if (from != point)
+		if (last != first)
 		{
-			int32_t prevTileY = GetTileCoordY(glm::floor(from.y));
+			LineTo(first);
+		}
 
-			int32_t xDir = sign(point.x - from.x);
-			int32_t yDir = sign(point.y - from.y);
-			float dtdx = 1.0f / (point.x - from.x);
-			float dtdy = 1.0f / (point.y - from.y);
-			int32_t x = from.x; // Convert to int
-			int32_t y = from.y; // Convert to int
+		first = point;
+		last = point;
+		prevTileY = GetTileCoordY(glm::floor(point.y));
+	}
+
+	void Rasterizer::LineTo(const glm::vec2& point)
+	{
+		if (point != last)
+		{
+			int32_t xDir = sign(point.x - last.x);
+			int32_t yDir = sign(point.y - last.y);
+			float dtdx = 1.0f / (point.x - last.x);
+			float dtdy = 1.0f / (point.y - last.y);
+			int32_t x = glm::floor(last.x); // Convert to int
+			int32_t y = glm::floor(last.y);  // Convert to int
 			float rowt0 = 0.0f;
 			float colt0 = 0.0f;
 
 			float rowt1;
-			if (from.y == point.y)
+			if (last.y == point.y)
 			{
 				rowt1 = std::numeric_limits<float>::max();
 			}
 			else
 			{
-				float nextY = point.y > from.y ? y + 1 : y;
-				rowt1 = glm::min((dtdy * (nextY - from.y)), 1.0f);
+				float nextY = point.y > last.y ? y + 1 : y;
+				rowt1 = glm::min((dtdy * (nextY - last.y)), 1.0f);
 			}
 
 			float colt1;
-			if (from.x == point.x)
+			if (last.x == point.x)
 			{
 				colt1 = std::numeric_limits<float>::max();
 			}
 			else
 			{
-				float nextX = point.x > from.x ? x + 1 : x;
-				colt1 = glm::min((dtdx * (nextX - from.x)), 1.0f);
+				float nextX = point.x > last.x ? x + 1 : x;
+				colt1 = glm::min((dtdx * (nextX - last.x)), 1.0f);
 			}
 
 			float xStep = glm::abs(dtdx);
@@ -110,21 +117,26 @@ namespace SvgRenderer {
 			{
 				float t0 = glm::max(rowt0, colt0);
 				float t1 = glm::min(rowt1, colt1);
-				glm::vec2 p0 = (1.0f - t0) * from + t0 * point;
-				glm::vec2 p1 = (1.0f - t1) * from + t1 * point;
+				glm::vec2 p0 = (1.0f - t0) * last + t0 * point;
+				glm::vec2 p1 = (1.0f - t1) * last + t1 * point;
 				float height = p1.y - p0.y;
 				float right = x + 1;
 				float area = 0.5f * height * ((right - p0.x) + (right - p1.x));
 
 				int32_t relativeX = glm::abs(x % TILE_SIZE);
 				int32_t relativeY = glm::abs(y % TILE_SIZE);
-
+				if (x < 0)
 				{
-					const std::lock_guard<std::mutex> lock(tilesMutex2);
-					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].area += area;
-					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].height += height;
-					GetTileFromWindowPos(x, y).hasIncrements = true;
+					relativeX = TILE_SIZE - relativeX - 1;
 				}
+				if (y < 0)
+				{
+					relativeY = TILE_SIZE - relativeY - 1;
+				}
+
+				GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].area += area;
+				GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].height += height;
+				GetTileFromWindowPos(x, y).hasIncrements = true;
 
 				// Advance to the next scanline
 				if (rowt1 < colt1)
@@ -155,13 +167,10 @@ namespace SvgRenderer {
 					int8_t v2 = tileY - prevTileY; // Are we moving from top to bottom, or bottom to top? (1 = from lower tile to higher tile, -1 = opposite)
 					uint32_t currentTileY = v2 == 1 ? prevTileY : tileY;
 
+					uint32_t currentIndex = glm::max(glm::min(GetTileIndexFromRelativePos(v1, currentTileY), static_cast<uint32_t>(tiles.size() - 1)), 0u);
+					for (size_t i = 0; i < currentIndex; i++)
 					{
-						uint32_t currentIndex = glm::max(glm::min(GetTileIndexFromRelativePos(v1, currentTileY), static_cast<uint32_t>(tiles.size() - 1)), 0u);
-						const std::lock_guard<std::mutex> lock(tilesMutex2);
-						for (size_t i = 0; i < currentIndex; i++)
-						{
-							tiles[i].winding += v2;
-						}
+						tiles[i].winding += v2;
 					}
 
 					prevTileY = tileY;
@@ -174,44 +183,28 @@ namespace SvgRenderer {
 				}
 			}
 		}
+
+		last = point;
 	}
 
 	void Rasterizer::CommandFromArray(const PathRenderCmd& cmd, const glm::vec2& lastPoint)
 	{
-		std::vector<uint32_t> indices(cmd.endIndexSimpleCommands - cmd.startIndexSimpleCommands + 1);
-		std::iota(indices.begin(), indices.end(), cmd.startIndexSimpleCommands);
-
-		std::for_each(std::execution::seq,
-			indices.begin(),
-			indices.end(),
-			[&](uint32_t index)
+		for (uint32_t i = cmd.startIndexSimpleCommands; i <= cmd.endIndexSimpleCommands; i++)
+		{
+			const SimpleCommand& simpleCmd = Globals::AllPaths.simpleCommands[i];
+			switch (simpleCmd.type)
 			{
-				const SimpleCommand& simpleCmd = Globals::AllPaths.simpleCommands[index];
-				glm::vec2 last;
-				if (index == cmd.startIndexSimpleCommands)
-				{
-					last = lastPoint;
-				}
-				else
-				{
-					last = Globals::AllPaths.simpleCommands[index - 1].point;
-				}
-
-				switch (simpleCmd.type)
-				{
-				case MOVE_TO:
-					last = simpleCmd.point;
-					break;
-				case LINE_TO:
-					this->LineTo(last, simpleCmd.point);
-					last = simpleCmd.point;
-					break;
-				default:
-					assert(false && "Only moves and lines");
-					break;
-				}
+			case MOVE_TO:
+				this->MoveTo(simpleCmd.point);
+				break;
+			case LINE_TO:
+				this->LineTo(simpleCmd.point);
+				break;
+			default:
+				assert(false && "Only moves and lines");
+				break;
 			}
-		);
+		}
 	}
 
 	void Rasterizer::FillFromArray(uint32_t pathIndex)
@@ -250,6 +243,11 @@ namespace SvgRenderer {
 
 	void Rasterizer::Finish(TileBuilder& builder)
 	{
+		if (last != first)
+		{
+			LineTo(first);
+		}
+
 		for (size_t i = 0; i < tiles.size(); i++)
 		{
 			const Tile& tile = tiles[i];
@@ -305,12 +303,12 @@ namespace SvgRenderer {
 			std::array<uint8_t, TILE_SIZE * TILE_SIZE> tileData;
 
 			// For each y-coord in the tile
-			for (uint32_t y = 0; y < TILE_SIZE; ++y)
+			for (uint32_t y = 0; y < TILE_SIZE; y++)
 			{
 				float accum = coverage[y];
 
 				// For each x-coord in the tile
-				for (uint32_t x = 0; x < TILE_SIZE; ++x)
+				for (uint32_t x = 0; x < TILE_SIZE; x++)
 				{
 					tileData[y * TILE_SIZE + x] = glm::min(glm::abs(accum + areas[y * TILE_SIZE + x]) * 256.0f, 255.0f);
 					accum += heights[y * TILE_SIZE + x];

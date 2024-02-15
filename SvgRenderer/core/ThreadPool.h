@@ -28,8 +28,7 @@
 
 namespace cb {
 
-	class ThreadPool
-	{
+	class ThreadPool {
 	public:
 		// Create a thread pool with `num_workers` dedicated worker threads.
 		explicit ThreadPool(int num_workers);

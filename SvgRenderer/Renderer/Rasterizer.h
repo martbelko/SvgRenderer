@@ -8,13 +8,12 @@
 #include <glm/glm.hpp>
 
 #include <array>
-#include <mutex>
 
 namespace SvgRenderer {
 
 	class PathRenderCmd;
 
-	constexpr float TOLERANCE = 0.1f;
+	constexpr float TOLERANCE = 0.05f;
 
 	struct Increment
 	{
@@ -40,19 +39,16 @@ namespace SvgRenderer {
 		Tile& GetTileFromRelativePos(int32_t x, int32_t y) { return tiles[GetTileIndexFromRelativePos(x, y)]; }
 		Tile& GetTileFromWindowPos(int32_t x, int32_t y) { return tiles[GetTileIndexFromWindowPos(x, y)]; }
 
-		const Tile& GetTileFromRelativePos(int32_t x, int32_t y) const { return tiles[GetTileIndexFromRelativePos(x, y)]; }
-		const Tile& GetTileFromWindowPos(int32_t x, int32_t y) const { return tiles[GetTileIndexFromWindowPos(x, y)]; }
-
 		uint32_t GetTileIndexFromRelativePos(int32_t x, int32_t y) const { return y * m_TileCountX + x; }
 		uint32_t GetTileIndexFromWindowPos(int32_t x, int32_t y) const
 		{
-			int32_t offsetX = x / TILE_SIZE - m_TileStartX;
-			int32_t offsetY = y / TILE_SIZE - m_TileStartY;
+			int32_t offsetX = glm::floor(static_cast<float>(x) / TILE_SIZE) - m_TileStartX;
+			int32_t offsetY = glm::floor(static_cast<float>(y) / TILE_SIZE) - m_TileStartY;
 			return offsetY * m_TileCountX + offsetX;
 		}
 
-		uint32_t GetTileCoordX(int32_t windowPosX) const { return windowPosX / TILE_SIZE - m_TileStartX; }
-		uint32_t GetTileCoordY(int32_t windowPosY) const { return windowPosY / TILE_SIZE - m_TileStartY; }
+		uint32_t GetTileCoordX(int32_t windowPosX) const { return glm::floor(static_cast<float>(windowPosX) / TILE_SIZE) - m_TileStartX; }
+		uint32_t GetTileCoordY(int32_t windowPosY) const { return glm::floor(static_cast<float>(windowPosY) / TILE_SIZE) - m_TileStartY; }
 
 		uint32_t m_Width, m_Height;
 
@@ -60,10 +56,13 @@ namespace SvgRenderer {
 		uint32_t m_TileCountX, m_TileCountY;
 
 		std::vector<Tile> tiles;
-		std::mutex tilesMutex;
-		std::mutex tilesMutex2;
 
-		void LineTo(glm::vec2 from, glm::vec2 to);
+		glm::vec2 first = { 0.0f, 0.0f };
+		glm::vec2 last = { 0.0f, 0.0f };
+		int16_t prevTileY = 0;
+
+		void MoveTo(const glm::vec2& point);
+		void LineTo(const glm::vec2& p1);
 
 		void CommandFromArray(const PathRenderCmd& command, const glm::vec2& lastPoint);
 		void FillFromArray(uint32_t pathIndex);
