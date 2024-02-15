@@ -64,19 +64,8 @@ namespace SvgRenderer {
 	cppcoro::generator<float> SvgParser::ParseNumbersLine(std::string_view str)
 	{
 		const char* nums = "0123456789.-e";
-		if (str.find("7.266-1.919.113-1.045.249-1.152.273-.802.341-.62.62-.756.938-.821 1.109-.63 2.554-.713 2.822-.551 1.47-.284 1.596-.058.127.01.947.038.571.235.264.39.069.474-.308.606-.957 1.299-.981 1.284-.841 1.186-.737 1.348-.444 1.318-.273 1.084-.172 1.26-.043 1.069.058 1.367.24 1.427.366 1.665.112.327-.024.444-.191.371-.39.284-.395.097-.625-.107-.758-.205-.63-.24-.156-.01-.376-.126-.278-.157-.294-.337-.067-.2.014-.19.332-.469.113-.089") == 0)
-		{
-			int xx = 6;
-		}
-
-		int ctr = 0;
-
 		while (!str.empty())
 		{
-			if (ctr == 32)
-				int xx = 6;
-			++ctr;
-
 			size_t numIndex = str.find_first_of(nums);
 			if (numIndex == std::string_view::npos)
 				break;
@@ -129,26 +118,10 @@ namespace SvgRenderer {
 	{
 		const char* nums = "0123456789.-";
 
-		int ctr = 0;
 		str = str.substr(str.find_first_of(untilOneOf), std::string_view::npos);
 
 		while (!str.empty())
 		{
-			bool pp = false;
-			if (str.find("m7.266-1.919.113-1.045.249-1.152.273-.802.341-.62.62-.756.938-.821 1.109-.63 2.554-.713 2.822-.551 1.47-.284 1.596-.058.127.01.947.038.571.235.264.39.069.474-.308.606-.957 1.299-.981 1.284-.841 1.186-.737 1.348-.444 1.318-.273 1.084-.172 1.26-.043 1.069.058 1.367.24 1.427.366 1.665.112.327-.024.444-.191.371-.39.284-.395.097-.625-.107-.758-.205-.63-.24-.156-.01-.376-.126-.278-.157-.294-.337-.067-.2.014-.19.332-.469.113-.089") == 0)
-			{
-				pp = true;
-			}
-
-			if (pp)
-			{
-				if (ctr == 2)
-				{
-					int xx = 6;
-				}
-				++ctr;
-			}
-
 			std::pair<char, std::vector<float>> result = std::make_pair(str[0], std::vector<float>());
 
 			str = str.substr(1, std::string_view::npos);
@@ -283,6 +256,7 @@ namespace SvgRenderer {
 		std::vector<SvgPath::Segment> segments;
 
 		glm::vec2 prevPoint = { 0.0f, 0.0f };
+		glm::vec2 firstPoint = { 0.0f, 0.0f };
 		for (const auto& [token, nums] : ParseNumbersUntilOneOf(str, tokens))
 		{
 			switch (token)
@@ -294,6 +268,7 @@ namespace SvgRenderer {
 						glm::vec2 point = { nums[0], nums[1] };
 						segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
 						prevPoint = point;
+						firstPoint = point;
 					}
 
 					for (size_t i = 2; i < nums.size(); i += 2)
@@ -313,6 +288,7 @@ namespace SvgRenderer {
 						glm::vec2 point = prevPoint + glm::vec2(nums[0], nums[0 + 1]);
 						segments.push_back(SvgPath::Segment(SvgPath::MoveTo{ .p = point }));
 						prevPoint = point;
+						firstPoint = point;
 					}
 
 					for (size_t i = 2; i < nums.size(); i += 2)
@@ -356,6 +332,7 @@ namespace SvgRenderer {
 				if (nums.empty())
 				{
 					segments.push_back(SvgPath::Segment(SvgPath::Close{}));
+					prevPoint = firstPoint;
 				}
 				else
 					SR_WARN("Invalid 'Z/z' in path");
@@ -754,9 +731,8 @@ namespace SvgRenderer {
 		path.stroke.color = flags.test(Flag::Stroke) ? path.stroke.color : group.stroke.color;
 		path.stroke.opacity = flags.test(Flag::StrokeOpacity) ? path.stroke.opacity : group.stroke.opacity;
 
-		path.transform = flags.test(Flag::Transform) ? path.transform * group.transform : group.transform;
-		if (path.transform[0][0] > 1000.0f)
-			int xx = 6;
+		bool xx = flags.test(Flag::Transform);
+		path.transform = flags.test(Flag::Transform) ? group.transform * path.transform : group.transform;
 
 		return new SvgNode(path);
 	}
