@@ -62,7 +62,7 @@ namespace SvgRenderer {
 				},
 				.stroke = SvgStrokeFill{
 					.color = { 0, 0, 0 },
-					.opacity = 0.0f,
+					.opacity = 1.0f,
 					.width = 1.0f
 				},
 				.transform = glm::mat3(1.0f)

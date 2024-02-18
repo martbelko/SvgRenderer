@@ -602,6 +602,11 @@ namespace SvgRenderer {
 				flags.set(Flag::FillOpacity, true);
 				group.fill.opacity = attr->FloatValue();
 			}
+			else if (attrName == "opacity")
+			{
+				// TODO: Implement
+				SR_WARN("Opacity used inside group, which is not implemented");
+			}
 			else if (attrName == "stroke-opacity")
 			{
 				flags.set(Flag::StrokeOpacity, true);
@@ -635,6 +640,7 @@ namespace SvgRenderer {
 
 		res.stroke.color = flags.test(Flag::Stroke) ? group.stroke.color : previous.stroke.color;
 		res.stroke.opacity = flags.test(Flag::StrokeOpacity) ? group.stroke.opacity : previous.stroke.opacity;
+		res.stroke.width = flags.test(Flag::StrokeWidth) ? group.stroke.width : previous.stroke.width;
 
 		res.transform = flags.test(Flag::Transform) ? group.transform * previous.transform : previous.transform;
 
@@ -682,7 +688,7 @@ namespace SvgRenderer {
 					path.stroke.color = *color;
 				}
 			}
-			else if (attrName == "fill-opacity")
+			else if (attrName == "fill-opacity" || attrName == "opacity")
 			{
 				flags.set(Flag::FillOpacity, true);
 				path.fill.opacity = attr->FloatValue();
@@ -730,6 +736,7 @@ namespace SvgRenderer {
 
 		path.stroke.color = flags.test(Flag::Stroke) ? path.stroke.color : group.stroke.color;
 		path.stroke.opacity = flags.test(Flag::StrokeOpacity) ? path.stroke.opacity : group.stroke.opacity;
+		path.stroke.width = flags.test(Flag::StrokeWidth) ? path.stroke.width : group.stroke.width;
 
 		bool xx = flags.test(Flag::Transform);
 		path.transform = flags.test(Flag::Transform) ? group.transform * path.transform : group.transform;
