@@ -70,9 +70,13 @@ namespace SvgRenderer {
 	{
 		float d = halfWidth;
 		bool fp = true;
+
+		std::vector<glm::vec2> ps1;
+		std::vector<glm::vec2> ps2;
+
 		for (uint32_t i = 0; i < points.size() - 1; i += 2)
 		{
-			glm::vec2 cp1 = points[i];
+			glm::vec2 cp1 = points[i + 0];
 			glm::vec2 cp2 = points[i + 1];
 			glm::vec2 cp3 = points[i + 2];
 
@@ -80,34 +84,45 @@ namespace SvgRenderer {
 			glm::vec2 n3 = -glm::normalize(QuadraticBezier::EvaluateDerivative(cp1, cp2, cp3, 1.0f));
 			n1 = { -n1.y, n1.x };
 			n3 = { -n3.y, n3.x };
-			assert(glm::dot(n1, n3) > 0.0f);
 			glm::vec2 n2 = n1 + n3;
 
 			float k = 2.0f * d / glm::length(n2);
 			glm::vec2 kvec = k * glm::normalize(n2);
 
 			glm::vec2 q1 = cp1 + d * n1;
-			glm::vec2 q3 = cp3 + d * n3;
 			glm::vec2 q2 = cp2 + kvec;
+			glm::vec2 q3 = cp3 + d * n3;
 
-			auto printvec = [](const glm::vec2& v)
-				{
-					std::cout << v.x << ' ' << v.y << ' ';
-				};
+			glm::vec2 p1 = cp1 - d * n1;
+			glm::vec2 p2 = cp2 - kvec;
+			glm::vec2 p3 = cp3 - d * n3;
 
 			if (fp)
 			{
-				std::cout << "M ";
-				printvec(q1);
 				fp = false;
-				std::cout << "Q ";
+				ps1.push_back(q1);
+				ps2.push_back(p1);
 			}
 
-			printvec(q2);
-			printvec(q3);
+			ps1.push_back(q2);
+			ps1.push_back(q3);
+			ps2.push_back(p2);
+			ps2.push_back(p3);
 		}
 
-		float xx = 0.0f;
+		cmds.push_back(PathCmd(MoveToCmd{ .point = ps1[0] }));
+		for (uint32_t i = 1; i < ps1.size() - 1; i += 2)
+		{
+			cmds.push_back(PathCmd(QuadToCmd{ .p1 = ps1[i], .p2 = ps1[i + 1] }));
+		}
+
+		cmds.push_back(PathCmd(LineToCmd{ .p1 = ps2[ps2.size() - 1] }));
+		for (uint32_t i = ps2.size() - 1; i > 0; i -= 2)
+		{
+			cmds.push_back(PathCmd(QuadToCmd{ .p1 = ps2[i - 1], .p2 = ps2[i - 2] }));
+		}
+
+		cmds.push_back(PathCmd(LineToCmd{ .p1 = ps1[0] }));
 	}
 
 	static void AddStroke(std::vector<PathCmd>& cmds, const QuadraticBezier& quadBez, float width)
@@ -158,6 +173,173 @@ namespace SvgRenderer {
 		CreateCommandsFromQuadBeziers(cmds, points, width);
 	}
 
+	static void AddStroke(std::vector<PathCmd>& cmds, const glm::vec2& from, const glm::vec2& to, float width)
+	{
+		// TODO: Implement
+	}
+
+	static void AddFillPath(const SvgPath& path, TileBuilder& builder)
+	{
+		glm::vec2 first = { 0, 0 };
+		glm::vec2 last = { 0, 0 };
+
+		std::vector<PathCmd> cmds;
+		for (const SvgPath::Segment& seg : path.segments)
+		{
+			switch (seg.type)
+			{
+			case SvgPath::Segment::Type::MoveTo:
+			{
+				if (last != first)
+				{
+					cmds.push_back(PathCmd(LineToCmd{ .p1 = first }));
+				}
+
+				cmds.push_back(PathCmd(MoveToCmd{ .point = seg.as.moveTo.p }));
+				first = seg.as.moveTo.p;
+				last = seg.as.moveTo.p;
+				break;
+			}
+			case SvgPath::Segment::Type::LineTo:
+				if (seg.as.lineTo.p != first)
+				{
+					cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
+				}
+
+				last = seg.as.lineTo.p;
+				break;
+			case SvgPath::Segment::Type::Close:
+				cmds.push_back(CloseCmd{});
+				last = first;
+				break;
+			case SvgPath::Segment::Type::QuadTo:
+				cmds.push_back(PathCmd(QuadToCmd{ .p1 = seg.as.quadTo.p1, .p2 = seg.as.quadTo.p2 }));
+				last = seg.as.quadTo.p2;
+				break;
+			case SvgPath::Segment::Type::CubicTo:
+				cmds.push_back(PathCmd(CubicToCmd{ .p1 = seg.as.cubicTo.p1, .p2 = seg.as.cubicTo.p2, .p3 = seg.as.cubicTo.p3 }));
+				last = seg.as.cubicTo.p3;
+				break;
+				// TODO: Implement others
+			}
+		}
+
+		// Only for FILL, not for STROKE
+		if (last != first)
+		{
+			cmds.push_back(PathCmd(LineToCmd{ .p1 = first }));
+		}
+
+		const SvgColor& c = path.fill.color;
+		builder.color = { c.r, c.g, c.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
+
+		Globals::AllPaths.paths.push_back(PathRender{
+			.startCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size()),
+			.endCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size() + cmds.size() - 1),
+			.transform = path.transform,
+			.color = builder.color,
+			.bbox = BoundingBox()
+			});
+
+		for (const PathCmd& cmd : cmds)
+		{
+			uint32_t index = Globals::AllPaths.paths.size() - 1; // -1, since we added path in the previous lines
+			uint32_t pathIndexCmdType = MAKE_CMD_PATH_INDEX(0, index);
+			pathIndexCmdType = MAKE_CMD_TYPE(pathIndexCmdType, static_cast<uint32_t>(cmd.type));
+
+			// This is just to fill all the 3 points, even though not all may be used
+			// It is based on the cmd type
+			std::array<glm::vec2, 3> points;
+			points[0] = cmd.as.cubicTo.p1;
+			points[1] = cmd.as.cubicTo.p2;
+			points[2] = cmd.as.cubicTo.p3;
+
+			Globals::AllPaths.commands.push_back(PathRenderCmd{
+				.pathIndexCmdType = pathIndexCmdType,
+				.points = points
+				});
+		}
+	}
+
+	static void AddStrokePath(const SvgPath& path, TileBuilder& builder)
+	{
+		glm::vec2 first = { 0, 0 };
+		glm::vec2 last = { 0, 0 };
+
+		std::vector<PathCmd> cmds;
+		for (const SvgPath::Segment& seg : path.segments)
+		{
+			switch (seg.type)
+			{
+			case SvgPath::Segment::Type::MoveTo:
+			{
+				//if (last != first)
+				//{
+				//	cmds.push_back(PathCmd(LineToCmd{ .p1 = first }));
+				//}
+
+				//cmds.push_back(PathCmd(MoveToCmd{ .point = seg.as.moveTo.p }));
+				first = seg.as.moveTo.p;
+				last = seg.as.moveTo.p;
+				break;
+			}
+			case SvgPath::Segment::Type::LineTo:
+				//if (seg.as.lineTo.p != first)
+				//{
+				//	cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
+				//}
+
+				last = seg.as.lineTo.p;
+				break;
+			case SvgPath::Segment::Type::Close:
+				//cmds.push_back(CloseCmd{});
+				AddStroke(cmds, last, first, 5.0f);
+				last = first;
+				break;
+			case SvgPath::Segment::Type::QuadTo:
+				//cmds.push_back(PathCmd(QuadToCmd{ .p1 = seg.as.quadTo.p1, .p2 = seg.as.quadTo.p2 }));
+				AddStroke(cmds, QuadraticBezier(last, seg.as.quadTo.p1, seg.as.quadTo.p2), 5.0f);
+				last = seg.as.quadTo.p2;
+				break;
+			case SvgPath::Segment::Type::CubicTo:
+				//cmds.push_back(PathCmd(CubicToCmd{ .p1 = seg.as.cubicTo.p1, .p2 = seg.as.cubicTo.p2, .p3 = seg.as.cubicTo.p3 }));
+				last = seg.as.cubicTo.p3;
+				break;
+				// TODO: Implement others
+			}
+		}
+
+		const SvgColor& c = path.fill.color;
+		builder.color = { 0, 255, c.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
+
+		Globals::AllPaths.paths.push_back(PathRender{
+			.startCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size()),
+			.endCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size() + cmds.size() - 1),
+			.transform = path.transform,
+			.color = builder.color,
+			.bbox = BoundingBox()
+		});
+
+		for (const PathCmd& cmd : cmds)
+		{
+			uint32_t index = Globals::AllPaths.paths.size() - 1; // -1, since we added path in the previous lines
+			uint32_t pathIndexCmdType = MAKE_CMD_PATH_INDEX(0, index);
+			pathIndexCmdType = MAKE_CMD_TYPE(pathIndexCmdType, static_cast<uint32_t>(cmd.type));
+
+			// This is just to fill all the 3 points, even though not all may be used
+			// It is based on the cmd type
+			std::array<glm::vec2, 3> points;
+			points[0] = cmd.as.cubicTo.p1;
+			points[1] = cmd.as.cubicTo.p2;
+			points[2] = cmd.as.cubicTo.p3;
+
+			Globals::AllPaths.commands.push_back(PathRenderCmd{
+				.pathIndexCmdType = pathIndexCmdType,
+				.points = points
+				});
+		}
+	}
+
 	static void Render(const SvgNode* node, TileBuilder& builder)
 	{
 		switch (node->type)
@@ -166,90 +348,10 @@ namespace SvgRenderer {
 		{
 			const SvgPath& path = node->as.path;
 
-			glm::vec2 first = { 0, 0 };
-			glm::vec2 last = { 0, 0 };
+			AddFillPath(path, builder);
+			AddStrokePath(path, builder);
 
-			std::vector<PathCmd> cmds;
-			for (const SvgPath::Segment& seg : path.segments)
-			{
-				switch (seg.type)
-				{
-				case SvgPath::Segment::Type::MoveTo:
-				{
-					if (last != first)
-					{
-						cmds.push_back(PathCmd(LineToCmd{ .p1 = first }));
-					}
-
-					cmds.push_back(PathCmd(MoveToCmd{ .point = seg.as.moveTo.p }));
-					first = seg.as.moveTo.p;
-					last = seg.as.moveTo.p;
-					break;
-				}
-				case SvgPath::Segment::Type::LineTo:
-					cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
-					break;
-					{
-						if (seg.as.lineTo.p != first)
-						{
-							cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
-						}
-
-						last = seg.as.lineTo.p;
-						break;
-					}
-				case SvgPath::Segment::Type::Close:
-					cmds.push_back(CloseCmd{});
-					last = first;
-					break;
-				case SvgPath::Segment::Type::QuadTo:
-					cmds.push_back(PathCmd(QuadToCmd{ .p1 = seg.as.quadTo.p1, .p2 = seg.as.quadTo.p2 }));
-					AddStroke(cmds, QuadraticBezier(last, seg.as.quadTo.p1, seg.as.quadTo.p2), 5.0f);
-					last = seg.as.quadTo.p2;
-					break;
-				case SvgPath::Segment::Type::CubicTo:
-					cmds.push_back(PathCmd(CubicToCmd{ .p1 = seg.as.cubicTo.p1, .p2 = seg.as.cubicTo.p2, .p3 = seg.as.cubicTo.p3 }));
-					last = seg.as.cubicTo.p3;
-					break;
-				// TODO: Implement others
-				}
-			}
-
-			// Only for FILL, not for STROKE
-			if (last != first)
-			{
-				cmds.push_back(PathCmd(LineToCmd{ .p1 = first }));
-			}
-
-			const SvgColor& c = path.fill.color;
-			builder.color = { c.r, c.g, c.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
-
-			Globals::AllPaths.paths.push_back(PathRender{
-				.startCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size()),
-				.endCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size() + cmds.size() - 1),
-				.transform = path.transform,
-				.color = builder.color,
-				.bbox = BoundingBox()
-			});
-
-			for (const PathCmd& cmd : cmds)
-			{
-				uint32_t index = Globals::AllPaths.paths.size() - 1; // -1, since we added path in the previous lines
-				uint32_t pathIndexCmdType = MAKE_CMD_PATH_INDEX(0, index);
-				pathIndexCmdType = MAKE_CMD_TYPE(pathIndexCmdType, static_cast<uint32_t>(cmd.type));
-
-				std::array<glm::vec2, 3> points;
-				points[0] = cmd.as.cubicTo.p1;
-				points[1] = cmd.as.cubicTo.p2;
-				points[2] = cmd.as.cubicTo.p3;
-
-				Globals::AllPaths.commands.push_back(PathRenderCmd{
-					.pathIndexCmdType = pathIndexCmdType,
-					.points = points
-				});
-			}
-
-			++g_PathIndex;
+			g_PathIndex++;
 			break;
 		}
 		}
@@ -344,29 +446,6 @@ namespace SvgRenderer {
 		});
 
 		Renderer::Init(initWidth, initHeight);
-
-		QuadraticBezier bez;
-		bez.p0 = { 70, 250 };
-		bez.p1 = { 20, 110 };
-		bez.p2 = { 220, 60 };
-
-		BezierPoint uu = bez.GetClosestPointToControlPoint();
-		glm::vec2 np1 = (1.0f - uu.t) * bez.p0 + uu.t * bez.p1;
-		glm::vec2 np2 = (1.0f - uu.t) * bez.p1 + uu.t * bez.p2;
-
-		QuadraticBezier bez1;
-		bez1.p0 = bez.p0;
-		bez1.p1 = np1;
-		bez1.p2 = uu.point;
-
-		QuadraticBezier bez2;
-		bez2.p0 = uu.point;
-		bez2.p1 = np2;
-		bez2.p2 = bez.p2;
-
-		glm::vec2 r = bez.EvaluateDerivative(0.0f);
-		r = glm::normalize(r);
-		glm::vec2 xx = bez.p0 + r * 50.0f;
 
 		SR_TRACE("Parsing start");
 		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/test6.svg");
