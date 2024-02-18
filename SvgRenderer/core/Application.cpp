@@ -127,7 +127,7 @@ namespace SvgRenderer {
 
 	static void AddStroke(std::vector<PathCmd>& cmds, const QuadraticBezier& quadBez, float width)
 	{
-		uint32_t iterations = glm::ceil(width / 2.0f);
+		const uint32_t iterations = 1;
 
 		std::vector<glm::vec2> points;
 		uint32_t count = 1 + glm::pow(2, iterations + 1);
@@ -170,12 +170,26 @@ namespace SvgRenderer {
 			step /= 2;
 		}
 
-		CreateCommandsFromQuadBeziers(cmds, points, width);
+		CreateCommandsFromQuadBeziers(cmds, points, width / 2.0f);
 	}
 
 	static void AddStroke(std::vector<PathCmd>& cmds, const glm::vec2& from, const glm::vec2& to, float width)
 	{
-		// TODO: Implement
+		const float halfWidth = width / 2.0f;
+
+		glm::vec2 dir = glm::normalize(to - from);
+		glm::vec2 n = { -dir.y, dir.x };
+
+		glm::vec2 p1 = from - halfWidth * n;
+		glm::vec2 p2 = to - halfWidth * n;
+		glm::vec2 p3 = to + halfWidth * n;
+		glm::vec2 p4 = from + halfWidth * n;
+
+		cmds.push_back(PathCmd(MoveToCmd{ .point = p1 }));
+		cmds.push_back(PathCmd(LineToCmd{ .p1 = p2 }));
+		cmds.push_back(PathCmd(LineToCmd{ .p1 = p3 }));
+		cmds.push_back(PathCmd(LineToCmd{ .p1 = p4 }));
+		cmds.push_back(PathCmd(LineToCmd{ .p1 = p1 }));
 	}
 
 	static void AddFillPath(const SvgPath& path, TileBuilder& builder)
@@ -209,7 +223,11 @@ namespace SvgRenderer {
 				last = seg.as.lineTo.p;
 				break;
 			case SvgPath::Segment::Type::Close:
-				cmds.push_back(CloseCmd{});
+				if (first != last)
+				{
+					cmds.push_back(LineToCmd{ .p1 = first });
+				}
+
 				last = first;
 				break;
 			case SvgPath::Segment::Type::QuadTo:
@@ -220,7 +238,7 @@ namespace SvgRenderer {
 				cmds.push_back(PathCmd(CubicToCmd{ .p1 = seg.as.cubicTo.p1, .p2 = seg.as.cubicTo.p2, .p3 = seg.as.cubicTo.p3 }));
 				last = seg.as.cubicTo.p3;
 				break;
-				// TODO: Implement others
+			// TODO: Implement others
 			}
 		}
 
@@ -273,44 +291,39 @@ namespace SvgRenderer {
 			{
 			case SvgPath::Segment::Type::MoveTo:
 			{
-				//if (last != first)
-				//{
-				//	cmds.push_back(PathCmd(LineToCmd{ .p1 = first }));
-				//}
-
-				//cmds.push_back(PathCmd(MoveToCmd{ .point = seg.as.moveTo.p }));
 				first = seg.as.moveTo.p;
 				last = seg.as.moveTo.p;
 				break;
 			}
 			case SvgPath::Segment::Type::LineTo:
-				//if (seg.as.lineTo.p != first)
-				//{
-				//	cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
-				//}
+				if (seg.as.lineTo.p != first)
+				{
+					AddStroke(cmds, last, seg.as.lineTo.p, 25.0f);
+				}
 
 				last = seg.as.lineTo.p;
 				break;
 			case SvgPath::Segment::Type::Close:
-				//cmds.push_back(CloseCmd{});
-				AddStroke(cmds, last, first, 5.0f);
+				if (last != first)
+				{
+					AddStroke(cmds, last, first, 25.0f);
+				}
+
 				last = first;
 				break;
 			case SvgPath::Segment::Type::QuadTo:
-				//cmds.push_back(PathCmd(QuadToCmd{ .p1 = seg.as.quadTo.p1, .p2 = seg.as.quadTo.p2 }));
-				AddStroke(cmds, QuadraticBezier(last, seg.as.quadTo.p1, seg.as.quadTo.p2), 5.0f);
+				AddStroke(cmds, QuadraticBezier(last, seg.as.quadTo.p1, seg.as.quadTo.p2), 25.0f);
 				last = seg.as.quadTo.p2;
 				break;
 			case SvgPath::Segment::Type::CubicTo:
-				//cmds.push_back(PathCmd(CubicToCmd{ .p1 = seg.as.cubicTo.p1, .p2 = seg.as.cubicTo.p2, .p3 = seg.as.cubicTo.p3 }));
 				last = seg.as.cubicTo.p3;
 				break;
-				// TODO: Implement others
+			// TODO: Implement others
 			}
 		}
 
-		const SvgColor& c = path.fill.color;
-		builder.color = { 0, 255, c.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
+		const SvgColor& c = path.stroke.color;
+		builder.color = { c.r, c.g, c.b, static_cast<uint8_t>(path.stroke.opacity * 255.0f) };
 
 		Globals::AllPaths.paths.push_back(PathRender{
 			.startCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size()),
@@ -336,7 +349,7 @@ namespace SvgRenderer {
 			Globals::AllPaths.commands.push_back(PathRenderCmd{
 				.pathIndexCmdType = pathIndexCmdType,
 				.points = points
-				});
+			});
 		}
 	}
 
