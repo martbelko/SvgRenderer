@@ -127,7 +127,7 @@ namespace SvgRenderer {
 
 	static void AddStroke(std::vector<PathCmd>& cmds, const QuadraticBezier& quadBez, float width)
 	{
-		const uint32_t iterations = 1;
+		const uint32_t iterations = 3;
 
 		std::vector<glm::vec2> points;
 		uint32_t count = 1 + glm::pow(2, iterations + 1);
@@ -298,7 +298,7 @@ namespace SvgRenderer {
 			case SvgPath::Segment::Type::LineTo:
 				if (seg.as.lineTo.p != first)
 				{
-					AddStroke(cmds, last, seg.as.lineTo.p, 25.0f);
+					AddStroke(cmds, last, seg.as.lineTo.p, path.stroke.width);
 				}
 
 				last = seg.as.lineTo.p;
@@ -306,13 +306,13 @@ namespace SvgRenderer {
 			case SvgPath::Segment::Type::Close:
 				if (last != first)
 				{
-					AddStroke(cmds, last, first, 25.0f);
+					AddStroke(cmds, last, first, path.stroke.width);
 				}
 
 				last = first;
 				break;
 			case SvgPath::Segment::Type::QuadTo:
-				AddStroke(cmds, QuadraticBezier(last, seg.as.quadTo.p1, seg.as.quadTo.p2), 25.0f);
+				AddStroke(cmds, QuadraticBezier(last, seg.as.quadTo.p1, seg.as.quadTo.p2), path.stroke.width);
 				last = seg.as.quadTo.p2;
 				break;
 			case SvgPath::Segment::Type::CubicTo:
@@ -362,7 +362,11 @@ namespace SvgRenderer {
 			const SvgPath& path = node->as.path;
 
 			AddFillPath(path, builder);
-			AddStrokePath(path, builder);
+
+			if (path.stroke.hasStroke)
+			{
+				AddStrokePath(path, builder);
+			}
 
 			g_PathIndex++;
 			break;

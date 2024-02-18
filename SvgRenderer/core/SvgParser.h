@@ -40,6 +40,7 @@ namespace SvgRenderer {
 		SvgColor color;
 		float opacity;
 		float width;
+		bool hasStroke;
 	};
 
 	struct SvgSvg
@@ -63,7 +64,8 @@ namespace SvgRenderer {
 				.stroke = SvgStrokeFill{
 					.color = { 0, 0, 0 },
 					.opacity = 1.0f,
-					.width = 1.0f
+					.width = 1.0f,
+					.hasStroke = false
 				},
 				.transform = glm::mat3(1.0f)
 			};

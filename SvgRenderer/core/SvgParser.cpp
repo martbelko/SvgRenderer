@@ -641,6 +641,7 @@ namespace SvgRenderer {
 		res.stroke.color = flags.test(Flag::Stroke) ? group.stroke.color : previous.stroke.color;
 		res.stroke.opacity = flags.test(Flag::StrokeOpacity) ? group.stroke.opacity : previous.stroke.opacity;
 		res.stroke.width = flags.test(Flag::StrokeWidth) ? group.stroke.width : previous.stroke.width;
+		res.stroke.hasStroke = (flags.test(Flag::Stroke) || previous.stroke.hasStroke) && res.stroke.opacity > 0.0f && res.stroke.width != 0.0f;
 
 		res.transform = flags.test(Flag::Transform) ? group.transform * previous.transform : previous.transform;
 
@@ -721,14 +722,18 @@ namespace SvgRenderer {
 			{
 				path.segments = ParsePathString(attr->Value());
 				if (path.segments.empty())
+				{
 					return nullptr;
+				}
 			}
 		}
 
 		// We return nullptr, if the group did not set any flag, or dont have
 		// any segments in the path, because then it does not have any relevant information
 		if (flags.none() && path.segments.empty())
+		{
 			return nullptr;
+		}
 
 		path.fill.color = flags.test(Flag::Fill) ? path.fill.color : group.fill.color;
 		path.fill.opacity = flags.test(Flag::FillOpacity) ? path.fill.opacity : group.fill.opacity;
@@ -737,8 +742,8 @@ namespace SvgRenderer {
 		path.stroke.color = flags.test(Flag::Stroke) ? path.stroke.color : group.stroke.color;
 		path.stroke.opacity = flags.test(Flag::StrokeOpacity) ? path.stroke.opacity : group.stroke.opacity;
 		path.stroke.width = flags.test(Flag::StrokeWidth) ? path.stroke.width : group.stroke.width;
+		path.stroke.hasStroke = (flags.test(Flag::Stroke) || group.stroke.hasStroke) && path.stroke.opacity > 0.0f && path.stroke.width != 0.0f;
 
-		bool xx = flags.test(Flag::Transform);
 		path.transform = flags.test(Flag::Transform) ? group.transform * path.transform : group.transform;
 
 		return new SvgNode(path);
