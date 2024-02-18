@@ -16,10 +16,12 @@
 
 #include "Renderer/Defs.h"
 #include "Renderer/Flattening.h"
+#include "Renderer/Bezier.h"
 
 #include "Scene/OrthographicCamera.h"
 
 #include "Utils/BoundingBox.h"
+#include "Utils/Equations.h"
 
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
@@ -29,7 +31,10 @@
 
 #include <array>
 #include <vector>
+#include <execution>
 #include <future>
+
+#include <omp.h>
 
 namespace SvgRenderer {
 
@@ -39,6 +44,119 @@ namespace SvgRenderer {
 	uint32_t g_PathIndex = 0;
 
 	Application Application::s_Instance;
+
+	static std::pair<QuadraticBezier, QuadraticBezier> SplitByClosestPoint(const QuadraticBezier& quadBez)
+	{
+		BezierPoint splitPoint = quadBez.GetClosestPointToControlPoint();
+		glm::vec2 cp1 = (1.0f - splitPoint.t) * quadBez.p0 + splitPoint.t * quadBez.p1;
+		glm::vec2 cp2 = (1.0f - splitPoint.t) * quadBez.p1 + splitPoint.t * quadBez.p2;
+
+		QuadraticBezier bez1{
+			.p0 = quadBez.p0,
+			.p1 = cp1,
+			.p2 = splitPoint.point
+		};
+
+		QuadraticBezier bez2{
+			.p0 = splitPoint.point,
+			.p1 = cp2,
+			.p2 = quadBez.p2
+		};
+
+		return std::make_pair(std::move(bez1), std::move(bez2));
+	}
+
+	static void CreateCommandsFromQuadBeziers(std::vector<PathCmd>& cmds, const std::vector<glm::vec2>& points, float halfWidth)
+	{
+		float d = halfWidth;
+		bool fp = true;
+		for (uint32_t i = 0; i < points.size() - 1; i += 2)
+		{
+			glm::vec2 cp1 = points[i];
+			glm::vec2 cp2 = points[i + 1];
+			glm::vec2 cp3 = points[i + 2];
+
+			glm::vec2 n1 = -glm::normalize(QuadraticBezier::EvaluateDerivative(cp1, cp2, cp3, 0.0f));
+			glm::vec2 n3 = -glm::normalize(QuadraticBezier::EvaluateDerivative(cp1, cp2, cp3, 1.0f));
+			n1 = { -n1.y, n1.x };
+			n3 = { -n3.y, n3.x };
+			assert(glm::dot(n1, n3) > 0.0f);
+			glm::vec2 n2 = n1 + n3;
+
+			float k = 2.0f * d / glm::length(n2);
+			glm::vec2 kvec = k * glm::normalize(n2);
+
+			glm::vec2 q1 = cp1 + d * n1;
+			glm::vec2 q3 = cp3 + d * n3;
+			glm::vec2 q2 = cp2 + kvec;
+
+			auto printvec = [](const glm::vec2& v)
+				{
+					std::cout << v.x << ' ' << v.y << ' ';
+				};
+
+			if (fp)
+			{
+				std::cout << "M ";
+				printvec(q1);
+				fp = false;
+				std::cout << "Q ";
+			}
+
+			printvec(q2);
+			printvec(q3);
+		}
+
+		float xx = 0.0f;
+	}
+
+	static void AddStroke(std::vector<PathCmd>& cmds, const QuadraticBezier& quadBez, float width)
+	{
+		uint32_t iterations = glm::ceil(width / 2.0f);
+
+		std::vector<glm::vec2> points;
+		uint32_t count = 1 + glm::pow(2, iterations + 1);
+		points.resize(count);
+
+		points[0] = (quadBez.p0);
+		points[count / 2] = (quadBez.p1);
+		points[count - 1] = (quadBez.p2);
+
+		uint32_t bezCount = 1;
+		uint32_t step = count - 1;
+		for (uint32_t i = 0; i < iterations; i++)
+		{
+			for (uint32_t j = 0; j < bezCount; j++)
+			{
+				// 0 -> [0, 8]
+				// 1 -> [0, 4], [4, 8]
+				// 2 -> [0, 2], [2, 4], [4, 6], [6, 8]
+				uint32_t low = j * step;
+				uint32_t high = low + step;
+				uint32_t mid = (low + high) / 2;
+
+				QuadraticBezier qb{
+					.p0 = points[low],
+					.p1 = points[mid],
+					.p2 = points[high]
+				};
+
+				auto [sqb1, sqb2] = SplitByClosestPoint(qb);
+
+				uint32_t mid1 = (low + mid) / 2;
+				uint32_t mid2 = (mid + high) / 2;
+
+				points[mid1] = sqb1.p1;
+				points[mid] = sqb1.p2;
+				points[mid2] = sqb2.p1;
+			}
+
+			bezCount *= 2;
+			step /= 2;
+		}
+
+		CreateCommandsFromQuadBeziers(cmds, points, width);
+	}
 
 	static void Render(const SvgNode* node, TileBuilder& builder)
 	{
@@ -86,6 +204,7 @@ namespace SvgRenderer {
 					break;
 				case SvgPath::Segment::Type::QuadTo:
 					cmds.push_back(PathCmd(QuadToCmd{ .p1 = seg.as.quadTo.p1, .p2 = seg.as.quadTo.p2 }));
+					AddStroke(cmds, QuadraticBezier(last, seg.as.quadTo.p1, seg.as.quadTo.p2), 5.0f);
 					last = seg.as.quadTo.p2;
 					break;
 				case SvgPath::Segment::Type::CubicTo:
@@ -130,10 +249,6 @@ namespace SvgRenderer {
 				});
 			}
 
-			//Rasterizer rast(SCREEN_WIDTH, SCREEN_HEIGHT);
-			//rast.Fill(cmds, path.transform);
-			//rast.Finish(builder);
-
 			++g_PathIndex;
 			break;
 		}
@@ -152,7 +267,7 @@ namespace SvgRenderer {
 
 	static void TransformPath(uint32_t pathIndex)
 	{
-		PathRender& path = Globals::AllPaths.paths[pathIndex];
+		const PathRender& path = Globals::AllPaths.paths[pathIndex];
 		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
 		{
 			PathRenderCmd& cmd = Globals::AllPaths.commands[i];
@@ -177,43 +292,36 @@ namespace SvgRenderer {
 		}
 	}
 
+	static void TransformCurve(PathRenderCmd* cmd)
+	{
+		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd->pathIndexCmdType);
+		uint32_t cmdType = GET_CMD_TYPE(cmd->pathIndexCmdType);
+		switch (cmdType)
+		{
+		case MOVE_TO:
+		case LINE_TO:
+			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+			break;
+		case QUAD_TO:
+			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+			cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
+			break;
+		case CUBIC_TO:
+			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+			cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
+			cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
+			break;
+		}
+	};
+
 	static void TransformPathAsync(uint32_t pathIndex)
 	{
 		PathRender& path = Globals::AllPaths.paths[pathIndex];
 
-		auto transformCurve = [](PathRenderCmd* cmd)
-		{
-			uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd->pathIndexCmdType);
-			uint32_t cmdType = GET_CMD_TYPE(cmd->pathIndexCmdType);
-			switch (cmdType)
-			{
-			case MOVE_TO:
-			case LINE_TO:
-				cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-				break;
-			case QUAD_TO:
-				cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-				cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
-				break;
-			case CUBIC_TO:
-				cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-				cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
-				cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
-				break;
-			}
-		};
-
-		std::vector<std::future<void>> futures;
-		futures.reserve(path.endCmdIndex - path.startCmdIndex + 1);
-
+		#pragma omp parallel for
 		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
 		{
-			futures.push_back(std::async(std::launch::async, transformCurve, &Globals::AllPaths.commands[i]));
-		}
-
-		for (auto& f : futures)
-		{
-			f.wait();
+			TransformCurve(&Globals::AllPaths.commands[i]);
 		}
 	}
 
@@ -237,8 +345,31 @@ namespace SvgRenderer {
 
 		Renderer::Init(initWidth, initHeight);
 
+		QuadraticBezier bez;
+		bez.p0 = { 70, 250 };
+		bez.p1 = { 20, 110 };
+		bez.p2 = { 220, 60 };
+
+		BezierPoint uu = bez.GetClosestPointToControlPoint();
+		glm::vec2 np1 = (1.0f - uu.t) * bez.p0 + uu.t * bez.p1;
+		glm::vec2 np2 = (1.0f - uu.t) * bez.p1 + uu.t * bez.p2;
+
+		QuadraticBezier bez1;
+		bez1.p0 = bez.p0;
+		bez1.p1 = np1;
+		bez1.p2 = uu.point;
+
+		QuadraticBezier bez2;
+		bez2.p0 = uu.point;
+		bez2.p1 = np2;
+		bez2.p2 = bez.p2;
+
+		glm::vec2 r = bez.EvaluateDerivative(0.0f);
+		r = glm::normalize(r);
+		glm::vec2 xx = bez.p0 + r * 50.0f;
+
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/test6.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -246,20 +377,13 @@ namespace SvgRenderer {
 
 		// Everything after this line may be done in each frame
 
-#define ASYNC 0
+#define ASYNC 1
 		// 1.step: Transform the paths
 #if ASYNC == 1
-		std::vector<std::future<void>> futures;
-		futures.reserve(Globals::AllPaths.paths.size());
-
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
+		#pragma omp parallel for
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
-			futures.push_back(std::async(std::launch::async, TransformPathAsync, pathIndex));
-		}
-
-		for (auto& f : futures)
-		{
-			f.wait();
+			TransformPathAsync(pathIndex);
 		}
 #else
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)

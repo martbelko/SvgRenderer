@@ -70,6 +70,4 @@ namespace SvgRenderer {
 		PathCmd Transform(const glm::mat3& transform) const;
 	};
 
-	std::vector<PathCmd> PathStroke(const std::vector<PathCmd>& polygon, float width);
-
 }
