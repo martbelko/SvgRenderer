@@ -13,11 +13,63 @@ namespace SvgRenderer::Equations {
 		float x1, x2, x3;
 	};
 
+	// ax + b = 0
+	static CubicRoot SolveEq(float a, float b)
+	{
+		assert(a != 0.0f);
+		return CubicRoot{
+			.x1 = -b / a,
+			.x2 = std::numeric_limits<float>::max(),
+			.x3 = std::numeric_limits<float>::max()
+		};
+	}
+
+	static CubicRoot SolveQuadratic(float a, float b, float c)
+	{
+		if (a == 0.0f)
+		{
+			return SolveEq(b, c);
+		}
+
+		float disc = b * b - 4.0f * a * c;
+		if (disc < 0.0f)
+		{
+			return CubicRoot{
+				.x1 = std::numeric_limits<float>::max(),
+				.x2 = std::numeric_limits<float>::max(),
+				.x3 = std::numeric_limits<float>::max()
+			};
+		}
+
+		if (disc == 0.0f)
+		{
+			float x = -b / (2.0f * a);
+			return CubicRoot{
+				.x1 = x,
+				.x2 = std::numeric_limits<float>::max(),
+				.x3 = std::numeric_limits<float>::max()
+			};
+		}
+
+		float sqrtdisc = std::sqrt(disc);
+		float x1 = (-b + sqrtdisc) / (2.0f * a);
+		float x2 = (-b - sqrtdisc) / (2.0f * a);
+		return CubicRoot{
+			.x1 = x1,
+			.x2 = x2,
+			.x3 = std::numeric_limits<float>::max()
+		};
+	}
+
 	static CubicRoot SolveCubic(float a, float b, float c, float d)
 	{
+		if (a == 0.0f)
+		{
+			return SolveQuadratic(b, c, d);
+		}
+
 		// TODO: Add automatic conversion to quadratic equation and solve it, not assert
-		assert(a != 0.0f);
-		assert(d != 0.0f);
+		// assert(d != 0.0f);
 
 		float x1_real, x2_real, x3_real;
 		float x2_imag, x3_imag;
