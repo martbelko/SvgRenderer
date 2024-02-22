@@ -66,6 +66,50 @@ namespace SvgRenderer {
 		return std::make_pair(std::move(bez1), std::move(bez2));
 	}
 
+	static std::array<CubicBezier, 3> SplitByClosestPoints(const CubicBezier& cubicBez)
+	{
+		const BezierPoint s1 = cubicBez.GetClosestPointToControlPoint(0);
+		const BezierPoint s2 = cubicBez.GetClosestPointToControlPoint(1);
+		const float a = s1.t;
+		const float b = s2.t;
+
+		glm::vec2 p_000 = cubicBez.p0;
+		glm::vec2 p_001 = cubicBez.p1;
+		glm::vec2 p_011 = cubicBez.p2;
+		glm::vec2 p_111 = cubicBez.p3;
+
+		glm::vec2 p_00a = (1 - a) * p_000 * a * p_001;
+		glm::vec2 p_00b = (1 - b) * p_000 * b * p_001;
+
+		glm::vec2 p_01a = (1 - a) * p_001 + a * p_011;
+		glm::vec2 p_01b = (1 - b) * p_001 + b * p_011;
+
+		glm::vec2 p_0aa = (1 - a) * p_00a + a * p_01a;
+		glm::vec2 p_0bb = (1 - b) * p_00b + b * p_01b;
+
+		glm::vec2 p_0ab = (1 - a) * p_00b + a * p_0bb;
+
+		glm::vec2 p_a11 = (1 - a) * p_011 + a * p_111;
+		glm::vec2 p_b11 = (1 - b) * p_011 + b * p_111;
+
+		glm::vec2 p_1ab = (1 - a) * p_01b + a * p_b11;
+		glm::vec2 p_1bb = (1 - b) * p_01b + b * p_b11;
+
+		glm::vec2 p_bbb = (1 - b) * p_0bb + b * p_1bb;
+		// glm::vec2 p_aaa = (1 - a) * p_0aa + a * p_1aa;
+
+		auto printvec = [](const glm::vec2& v)
+		{
+			std::cout << v.x << ' ' << v.y << ' ';
+		};
+		printvec(p_bbb);
+		printvec(p_1bb);
+		printvec(p_b11);
+		printvec(p_111);
+
+		return std::array<CubicBezier, 3>();
+	}
+
 	static void CreateCommandsFromQuadBeziers(std::vector<PathCmd>& cmds, const std::vector<glm::vec2>& points, float halfWidth)
 	{
 		float d = halfWidth;
@@ -365,7 +409,7 @@ namespace SvgRenderer {
 
 			if (path.stroke.hasStroke)
 			{
-				AddStrokePath(path, builder);
+				//AddStrokePath(path, builder);
 			}
 
 			g_PathIndex++;
@@ -462,10 +506,18 @@ namespace SvgRenderer {
 			}
 		});
 
+		CubicBezier cb;
+		cb.p0 = { 70, 550 };
+		cb.p1 = { 250, 300 };
+		cb.p2 = { 500, 350 };
+		cb.p3 = { 620, 550 };
+
+		//SplitByClosestPoints(cb);
+
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/test6.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -473,13 +525,18 @@ namespace SvgRenderer {
 
 		// Everything after this line may be done in each frame
 
-#define ASYNC 1
+#define ASYNC 0
 		// 1.step: Transform the paths
 #if ASYNC == 1
-		#pragma omp parallel for
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
-			TransformPathAsync(pathIndex);
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.commands.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
+			std::for_each(indices.begin(), indices.end(), [](uint32_t cmdIndex)
+				{
+					TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
+				});
 		}
 #else
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
@@ -487,12 +544,91 @@ namespace SvgRenderer {
 			TransformPath(pathIndex);
 		}
 #endif
+
 		// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
+#if ASYNC == 1
+		auto getPreviousPoint = [](const PathRender& path, uint32_t index) -> glm::vec2
+		{
+			if (index == path.startCmdIndex)
+			{
+					return glm::vec2(0, 0);
+			}
+
+			PathRenderCmd& rndCmd = Globals::AllPaths.commands[index - 1];
+			uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+			switch (pathType)
+			{
+			case MOVE_TO:
+				return rndCmd.transformedPoints[0];
+			case LINE_TO:
+				return rndCmd.transformedPoints[0];
+			case QUAD_TO:
+				return rndCmd.transformedPoints[1];
+			case CUBIC_TO:
+				return rndCmd.transformedPoints[2];
+			}
+		};
+
+		uint32_t simpleCommandsCount = 0;
+		{
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.paths.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
+			constexpr uint32_t wgSize = 256;
+			std::array<uint32_t, wgSize> wgIndices;
+			std::iota(indices.begin(), indices.end(), 0);
+
+			std::for_each(indices.begin(), indices.end(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
+			{
+				const PathRender& path = Globals::AllPaths.paths[pathIndex];
+				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex < path.endCmdIndex; offsetCmdIndex += wgSize)
+				{
+					std::for_each(wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
+					{
+						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
+						if (cmdIndex > path.endCmdIndex)
+						{
+							return;
+						}
+
+						PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
+						glm::vec2 last = getPreviousPoint(path, cmdIndex);
+						uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
+						rndCmd.startIndexSimpleCommands = count;
+					});
+				}
+
+				for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
+				{
+					PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
+					glm::vec2 last = getPreviousPoint(path, i);
+					uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
+					rndCmd.startIndexSimpleCommands = count;
+				}
+			});
+
+			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+			{
+				const PathRender& path = Globals::AllPaths.paths[pathIndex];
+				for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
+				{
+					PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
+					uint32_t count = rndCmd.startIndexSimpleCommands;
+
+					rndCmd.startIndexSimpleCommands = simpleCommandsCount;
+					simpleCommandsCount += count;
+					rndCmd.endIndexSimpleCommands = simpleCommandsCount - 1;
+				}
+			}
+		}
+
+		Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
+#else
 		uint32_t simpleCommandsCount = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
-
 			glm::vec2 last = glm::vec2(0, 0);
 			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
 			{
@@ -523,7 +659,7 @@ namespace SvgRenderer {
 		}
 
 		Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
-
+#endif
 		// 3.step: Simplify the commands and store in the array
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
@@ -668,9 +804,7 @@ namespace SvgRenderer {
 		shader->Bind();
 
 		glUniform2ui(0, SCREEN_WIDTH, SCREEN_HEIGHT);
-
 		glUniform2ui(1, ATLAS_SIZE, ATLAS_SIZE);
-
 		glBindTextureUnit(0, tex);
 
 		camera.SetPosition(glm::vec3(0, 0, 0.5f));
@@ -685,7 +819,7 @@ namespace SvgRenderer {
 				m_TileBuilder.indices.size(),
 				GL_UNSIGNED_INT,
 				nullptr
-				);
+			);
 
 			glFinish();
 
