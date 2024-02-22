@@ -14,7 +14,7 @@ namespace SvgRenderer::Equations {
 	};
 
 	// ax + b = 0
-	static CubicRoot SolveEq(float a, float b)
+	static CubicRoot SolveLinearEq(float a, float b)
 	{
 		assert(a != 0.0f);
 		return CubicRoot{
@@ -28,7 +28,7 @@ namespace SvgRenderer::Equations {
 	{
 		if (a == 0.0f)
 		{
-			return SolveEq(b, c);
+			return SolveLinearEq(b, c);
 		}
 
 		float disc = b * b - 4.0f * a * c;
@@ -128,6 +128,18 @@ namespace SvgRenderer::Equations {
 		}
 
 		return makeReturn();
+	}
+
+	using NewtonMethodFn = std::function<float(float)>;
+	static float SolveEquationNewton(NewtonMethodFn func, NewtonMethodFn funcDerivative, float initialGuess)
+	{
+		float root = initialGuess;
+		for (int i = 0; i < 10; i++)
+		{
+			root = root - func(root) / funcDerivative(root);
+		}
+
+		return root;
 	}
 
 }
