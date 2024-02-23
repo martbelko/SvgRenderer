@@ -139,7 +139,7 @@ namespace SvgRenderer::Flattening {
 			break;
 		}
 		default:
-			//assert(false && "Unknown path type");
+			assert(false && "Unknown path type");
 			break;
 		}
 

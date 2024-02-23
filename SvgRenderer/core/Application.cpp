@@ -525,7 +525,7 @@ namespace SvgRenderer {
 
 		// Everything after this line may be done in each frame
 
-#define ASYNC 0
+#define ASYNC 1
 		// 1.step: Transform the paths
 #if ASYNC == 1
 		{
@@ -533,10 +533,10 @@ namespace SvgRenderer {
 			indices.resize(Globals::AllPaths.commands.size());
 			std::iota(indices.begin(), indices.end(), 0);
 
-			std::for_each(indices.begin(), indices.end(), [](uint32_t cmdIndex)
-				{
-					TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
-				});
+			std::for_each(std::execution::par, indices.begin(), indices.end(), [](uint32_t cmdIndex)
+			{
+				TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
+			});
 		}
 #else
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
@@ -577,14 +577,14 @@ namespace SvgRenderer {
 
 			constexpr uint32_t wgSize = 256;
 			std::array<uint32_t, wgSize> wgIndices;
-			std::iota(indices.begin(), indices.end(), 0);
+			std::iota(wgIndices.begin(), wgIndices.end(), 0);
 
-			std::for_each(indices.begin(), indices.end(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
+			std::for_each(std::execution::par, indices.begin(), indices.end(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
-				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex < path.endCmdIndex; offsetCmdIndex += wgSize)
+				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
 				{
-					std::for_each(wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
+					std::for_each(std::execution::par, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
 					{
 						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
 						if (cmdIndex > path.endCmdIndex)
@@ -597,14 +597,6 @@ namespace SvgRenderer {
 						uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
 						rndCmd.startIndexSimpleCommands = count;
 					});
-				}
-
-				for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
-				{
-					PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
-					glm::vec2 last = getPreviousPoint(path, i);
-					uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
-					rndCmd.startIndexSimpleCommands = count;
 				}
 			});
 
@@ -661,6 +653,54 @@ namespace SvgRenderer {
 		Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
 #endif
 		// 3.step: Simplify the commands and store in the array
+#if ASYNC == 1
+		{
+			// 3.1 Flattening
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.paths.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
+			constexpr uint32_t wgSize = 256;
+			std::array<uint32_t, wgSize> wgIndices;
+			std::iota(wgIndices.begin(), wgIndices.end(), 0);
+
+			std::for_each(indices.cbegin(), indices.cend(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
+			{
+				const PathRender& path = Globals::AllPaths.paths[pathIndex];
+				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex < path.endCmdIndex; offsetCmdIndex += wgSize)
+				{
+					std::for_each(wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
+					{
+						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
+						if (cmdIndex > path.endCmdIndex)
+						{
+							return;
+						}
+
+						PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
+						glm::vec2 last = getPreviousPoint(path, cmdIndex);
+						Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
+					});
+				}
+			});
+
+			// 4.1 Calculating BBOX
+			std::for_each(indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
+			{
+				PathRender& path = Globals::AllPaths.paths[pathIndex];
+				for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
+				{
+					PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
+					for (uint32_t i = rndCmd.startIndexSimpleCommands; i <= rndCmd.endIndexSimpleCommands; i++)
+					{
+						path.bbox.AddPoint(Globals::AllPaths.simpleCommands[i].point);
+					}
+				}
+
+				path.bbox.AddPadding({ 1.0f, 1.0f });
+			});
+		}
+#else
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -693,8 +733,9 @@ namespace SvgRenderer {
 			// Maybe add more padding?
 			path.bbox.AddPadding({ 1.0f, 1.0f });
 		}
-
+#endif
 		// 4.step: The rest
+#if ASYNC == 1
 		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
@@ -710,13 +751,25 @@ namespace SvgRenderer {
 			{
 				SR_TRACE("Processed {0} paths", total);
 			}
+		}
+#else
+		uint32_t total = 0;
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+		{
+			const PathRender& path = Globals::AllPaths.paths[pathIndex];
 
-			if (total == 46834)
+			Rasterizer rast(path.bbox);
+			rast.FillFromArray(pathIndex);
+
+			m_TileBuilder.color = path.color;
+			rast.Finish(m_TileBuilder);
+
+			if (++total % 10000 == 0)
 			{
-				//total += 10;
-				//pathIndex += 10;
+				SR_TRACE("Processed {0} paths", total);
 			}
 		}
+#endif
 	}
 
 	void Application::Shutdown()
