@@ -56,6 +56,13 @@ namespace SvgRenderer::Flattening {
 		{
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
+
+			bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2);
+			if (!isVisible)
+			{
+				return 1;
+			}
+
 			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * p1 + p2)));
 			return glm::ceil(1.0f / dt);
 		}
@@ -64,6 +71,13 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 			const glm::vec2& p3 = cmd.transformedPoints[2];
+
+			bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2) || IsInsideViewSpace(p3);
+			if (!isVisible)
+			{
+				return 1;
+			}
+
 			const glm::vec2 a = -1.0f * last + 3.0f * p1 - 3.0f * p2 + p3;
 			const glm::vec2 b = 3.0f * (last - 2.0f * p1 + p2);
 			const float conc = glm::max(glm::length(b), glm::length(a + b));
@@ -75,6 +89,12 @@ namespace SvgRenderer::Flattening {
 		return 0;
 	}
 
+	bool IsInsideViewSpace(const glm::vec2& v)
+	{
+		constexpr float padding = 1.0f;
+		return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
+	}
+
 	BoundingBox FlattenIntoArray(const PathRenderCmd& cmd, glm::vec2 last, float tolerance)
 	{
 		uint32_t index = cmd.startIndexSimpleCommands;
@@ -84,17 +104,29 @@ namespace SvgRenderer::Flattening {
 		switch (pathType)
 		{
 		case MOVE_TO:
+		{
 			Globals::AllPaths.simpleCommands[index] = SimpleCommand{ .type = MOVE_TO, .point = cmd.transformedPoints[0] };
 			bbox.AddPoint(cmd.transformedPoints[0]);
 			break;
+		}
 		case LINE_TO:
-			Globals::AllPaths.simpleCommands[index] = SimpleCommand{ .type = LINE_TO, .point = cmd.transformedPoints[0] };
-			bbox.AddPoint(cmd.transformedPoints[0]);
+		{
+			const glm::vec2& p = cmd.transformedPoints[0];
+			Globals::AllPaths.simpleCommands[index] = SimpleCommand{ .type = LINE_TO, .point = p };
+			bbox.AddPoint(p);
 			break;
+		}
 		case QUAD_TO:
 		{
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
+
+			bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2);
+			if (!isVisible)
+			{
+				Globals::AllPaths.simpleCommands[index++] = SimpleCommand{ .type = LINE_TO, .point = p2 };
+				break;
+			}
 
 			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * p1 + p2)));
 			float t = 0.0f;
@@ -116,6 +148,13 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 			const glm::vec2& p3 = cmd.transformedPoints[2];
+
+			bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2) || IsInsideViewSpace(p3);
+			if (!isVisible)
+			{
+				Globals::AllPaths.simpleCommands[index++] = SimpleCommand{ .type = LINE_TO, .point = p3 };
+				break;
+			}
 
 			const glm::vec2 a = -1.0f * last + 3.0f * p1 - 3.0f * p2 + p3;
 			const glm::vec2 b = 3.0f * (last - 2.0f * p1 + p2);

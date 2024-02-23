@@ -17,15 +17,12 @@ namespace SvgRenderer {
 
 	struct Increment
 	{
-		int32_t x = 0;
-		int32_t y = 0;
 		float area = 0;
 		float height = 0;
 	};
 
 	struct Tile
 	{
-		int32_t tileX = 0, tileY = 0;
 		int32_t winding = 0;
 		bool hasIncrements = false;
 		std::array<Increment, TILE_SIZE * TILE_SIZE> increments;
@@ -50,6 +47,18 @@ namespace SvgRenderer {
 		uint32_t GetTileCoordX(int32_t windowPosX) const { return glm::floor(static_cast<float>(windowPosX) / TILE_SIZE) - m_TileStartX; }
 		uint32_t GetTileCoordY(int32_t windowPosY) const { return glm::floor(static_cast<float>(windowPosY) / TILE_SIZE) - m_TileStartY; }
 
+		int32_t GetTileXFromAbsoluteIndex(uint32_t absIndex) const
+		{
+			int32_t offset = absIndex % m_TileCountX;
+			return m_TileStartX + offset;
+		}
+
+		int32_t GetTileYFromAbsoluteIndex(uint32_t absIndex) const
+		{
+			int32_t offset = absIndex / m_TileCountX;
+			return m_TileStartY + offset;
+		}
+
 		uint32_t m_Width, m_Height;
 
 		int32_t m_TileStartX, m_TileStartY;
@@ -66,7 +75,6 @@ namespace SvgRenderer {
 
 		void CommandFromArray(const PathRenderCmd& command, const glm::vec2& lastPoint);
 		void FillFromArray(uint32_t pathIndex);
-		void Stroke(const std::vector<PathCmd>& path, float width, const glm::mat3& transform);
 
 		void Finish(TileBuilder& builder);
 	};

@@ -41,24 +41,10 @@ namespace SvgRenderer {
 			for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
 			{
 				tiles.push_back(Tile{
-					.tileX = x,
-					.tileY = y,
 					.winding = 0,
 					.hasIncrements = false,
 					.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
 				});
-
-				Tile& tile = tiles.back();
-				for (int32_t relativeY = 0; relativeY < TILE_SIZE; relativeY++)
-				{
-					for (int32_t relativeX = 0; relativeX < TILE_SIZE; relativeX++)
-					{
-						tile.increments[relativeY * TILE_SIZE + relativeX].x = relativeX;
-						tile.increments[relativeY * TILE_SIZE + relativeX].y = relativeY;
-						tile.increments[relativeY * TILE_SIZE + relativeX].area = 0;
-						tile.increments[relativeY * TILE_SIZE + relativeX].height = 0;
-					}
-				}
 			}
 		}
 	}
@@ -236,11 +222,6 @@ namespace SvgRenderer {
 		}
 	}
 
-	void Rasterizer::Stroke(const std::vector<PathCmd>& path, float width, const glm::mat3& transform)
-	{
-		//Fill(PathStroke(PathFlatten(path, TOLERANCE), width), transform);
-	}
-
 	void Rasterizer::Finish(TileBuilder& builder)
 	{
 		if (last != first)
@@ -257,22 +238,26 @@ namespace SvgRenderer {
 			}
 
 			Tile* nextTile = nullptr;
-			for (size_t j = i + 1; j < tiles.size() && tiles[j].tileY == tile.tileY; j++)
+			const int32_t tileY = GetTileYFromAbsoluteIndex(i);
+			int32_t nextTileX;
+			for (size_t j = i + 1; j < tiles.size() && GetTileYFromAbsoluteIndex(j) == tileY; j++)
 			{
 				if (tiles[j].hasIncrements)
 				{
 					nextTile = &tiles[j];
+					nextTileX = GetTileXFromAbsoluteIndex(j);
 					break;
 				}
 			}
 
 			if (nextTile != nullptr)
 			{
+				const int32_t tileX = GetTileXFromAbsoluteIndex(i);
 				// If the winding is nonzero, span the whole tile
-				if (GetTileFromRelativePos(tile.tileX - m_TileStartX, tile.tileY - m_TileStartY).winding != 0)
+				if (GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
 				{
-					int32_t width = nextTile->tileX - tile.tileX - 1;
-					builder.Span((tile.tileX + 1) * TILE_SIZE, tile.tileY * TILE_SIZE, width * TILE_SIZE);
+					int32_t width = nextTileX - tileX - 1;
+					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE);
 				}
 			}
 		}
@@ -281,7 +266,7 @@ namespace SvgRenderer {
 		std::array<float, TILE_SIZE * TILE_SIZE> heights{};
 		std::array<float, TILE_SIZE> coverage{};
 
-		for (size_t i = 0; i < tiles.size(); ++i)
+		for (uint32_t i = 0; i < tiles.size(); i++)
 		{
 			const Tile& tile = tiles[i];
 			if (!tile.hasIncrements)
@@ -317,13 +302,15 @@ namespace SvgRenderer {
 				coverage[y] = accum;
 			}
 
-			builder.Tile(tile.tileX * TILE_SIZE, tile.tileY * TILE_SIZE, tileData);
+			int32_t tileX = GetTileXFromAbsoluteIndex(i);
+			int32_t tileY = GetTileYFromAbsoluteIndex(i);
+			builder.Tile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData);
 
 			std::fill(areas.begin(), areas.end(), 0.0f);
 			std::fill(heights.begin(), heights.end(), 0.0f);
 
-			Tile* nextTile = nullptr; // Next active bin in the same y-coord, same as the previous one, could be optimized and only done once
-			for (size_t j = i + 1; j < tiles.size() && tiles[j].tileY == tile.tileY; ++j)
+			Tile* nextTile = nullptr; // Next active tile in the same y-coord, same as the previous one, could be optimized and only done once
+			for (size_t j = i + 1; j < tiles.size() && GetTileYFromAbsoluteIndex(j) == tileY; j++)
 			{
 				if (tiles[j].hasIncrements)
 				{

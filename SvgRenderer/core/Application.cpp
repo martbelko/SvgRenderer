@@ -517,7 +517,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -607,7 +607,6 @@ namespace SvgRenderer {
 				{
 					PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
 					uint32_t count = rndCmd.startIndexSimpleCommands;
-
 					rndCmd.startIndexSimpleCommands = simpleCommandsCount;
 					simpleCommandsCount += count;
 					rndCmd.endIndexSimpleCommands = simpleCommandsCount - 1;
@@ -684,7 +683,7 @@ namespace SvgRenderer {
 				}
 			});
 
-			// 4.1 Calculating BBOX
+			// 3.1 Calculating BBOX
 			std::for_each(indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -736,10 +735,15 @@ namespace SvgRenderer {
 #endif
 		// 4.step: The rest
 #if ASYNC == 1
+		uint32_t cc = 0;
 		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
+			if (!Flattening::IsInsideViewSpace(path.bbox.min) || !Flattening::IsInsideViewSpace(path.bbox.max))
+			{
+				continue;
+			}
 
 			Rasterizer rast(path.bbox);
 			rast.FillFromArray(pathIndex);
@@ -747,11 +751,17 @@ namespace SvgRenderer {
 			m_TileBuilder.color = path.color;
 			rast.Finish(m_TileBuilder);
 
+			cc += rast.tiles.size();
+
 			if (++total % 10000 == 0)
 			{
 				SR_TRACE("Processed {0} paths", total);
 			}
 		}
+
+		// 2 576 084
+		std::cout << cc << '\n';
+		std::cout << sizeof(Tile) * cc << '\n';
 #else
 		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)

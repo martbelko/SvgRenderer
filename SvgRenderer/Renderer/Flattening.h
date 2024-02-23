@@ -22,4 +22,6 @@ namespace SvgRenderer::Flattening {
 	std::vector<PathCmd> Flatten(const PathRenderCmd& cmd, glm::vec2 last, float tolerance);
 	std::vector<PathCmd> Flatten(const PathCmd& cmd, glm::vec2 last, float tolerance);
 
+	bool IsInsideViewSpace(const glm::vec2& v);
+
 };
