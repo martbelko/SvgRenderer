@@ -81,6 +81,11 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2 a = -1.0f * last + 3.0f * p1 - 3.0f * p2 + p3;
 			const glm::vec2 b = 3.0f * (last - 2.0f * p1 + p2);
 			const float conc = glm::max(glm::length(b), glm::length(a + b));
+			if (conc == 0.0f)
+			{
+				return 1;
+			}
+
 			const float dt = glm::sqrt((glm::sqrt(8.0f) * tolerance) / conc);
 			return glm::ceil(1.0f / dt);
 		}
@@ -161,6 +166,7 @@ namespace SvgRenderer::Flattening {
 			const float conc = glm::max(glm::length(b), glm::length(a + b));
 			const float dt = glm::sqrt((glm::sqrt(8.0f) * tolerance) / conc);
 			float t = 0.0f;
+
 			while (t < 1.0f)
 			{
 				t = glm::min(t + dt, 1.0f);

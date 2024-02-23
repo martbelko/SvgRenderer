@@ -56,7 +56,7 @@ namespace SvgRenderer {
 	class Globals
 	{
 	public:
-		inline static glm::mat4 GlobalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0)) * glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
+		inline static glm::mat4 GlobalTransform = glm::mat4(1.0f); //glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0)) * glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
 		inline static PathsContainer AllPaths;
 		inline static TilesContainer Tiles;
 	};

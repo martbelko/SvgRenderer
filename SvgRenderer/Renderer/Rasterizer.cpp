@@ -51,10 +51,7 @@ namespace SvgRenderer {
 
 	void Rasterizer::MoveTo(const glm::vec2& point)
 	{
-		if (last != first)
-		{
-			LineTo(first);
-		}
+		assert(last == first);
 
 		first = point;
 		last = point;

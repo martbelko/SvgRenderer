@@ -259,7 +259,7 @@ namespace SvgRenderer {
 				break;
 			}
 			case SvgPath::Segment::Type::LineTo:
-				if (seg.as.lineTo.p != first)
+				if (seg.as.lineTo.p != last)
 				{
 					cmds.push_back(PathCmd(LineToCmd{ .p1 = seg.as.lineTo.p }));
 				}
@@ -663,12 +663,12 @@ namespace SvgRenderer {
 			std::array<uint32_t, wgSize> wgIndices;
 			std::iota(wgIndices.begin(), wgIndices.end(), 0);
 
-			std::for_each(indices.cbegin(), indices.cend(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
+			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
-				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex < path.endCmdIndex; offsetCmdIndex += wgSize)
+				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
 				{
-					std::for_each(wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
+					std::for_each(std::execution::par, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
 					{
 						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
 						if (cmdIndex > path.endCmdIndex)
@@ -684,7 +684,7 @@ namespace SvgRenderer {
 			});
 
 			// 3.1 Calculating BBOX
-			std::for_each(indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
+			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
 				for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
@@ -740,7 +740,7 @@ namespace SvgRenderer {
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
-			if (!Flattening::IsInsideViewSpace(path.bbox.min) || !Flattening::IsInsideViewSpace(path.bbox.max))
+			if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
 			{
 				continue;
 			}
@@ -767,6 +767,10 @@ namespace SvgRenderer {
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
+			if (!Flattening::IsInsideViewSpace(path.bbox.min) || !Flattening::IsInsideViewSpace(path.bbox.max))
+			{
+				continue;
+			}
 
 			Rasterizer rast(path.bbox);
 			rast.FillFromArray(pathIndex);
