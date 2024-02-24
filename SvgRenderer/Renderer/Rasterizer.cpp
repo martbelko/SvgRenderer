@@ -1,6 +1,5 @@
 #include "Rasterizer.h"
 
-#include "Renderer/Defs.h"
 #include "Renderer/Flattening.h"
 
 #include <cassert>
@@ -16,8 +15,9 @@ namespace SvgRenderer {
 		return 0;
 	}
 
-	Rasterizer::Rasterizer(const BoundingBox& bbox)
+	Rasterizer::Rasterizer(const BoundingBox& bbox, uint32_t pi)
 	{
+		pathIndex = pi;
 		const int32_t minBboxCoordX = glm::floor(bbox.min.x);
 		const int32_t minBboxCoordY = glm::floor(bbox.min.y);
 		const int32_t maxBboxCoordX = glm::ceil(bbox.max.x);
@@ -32,21 +32,21 @@ namespace SvgRenderer {
 		m_TileStartY = minTileCoordY;
 		m_TileCountX = maxTileCoordX - minTileCoordX + 1;
 		m_TileCountY = maxTileCoordY - minTileCoordY + 1;
-
-		const uint32_t tileCount = m_TileCountX * m_TileCountY;
-		tiles.reserve(tileCount);
-
-		for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
-		{
-			for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
-			{
-				tiles.push_back(Tile{
-					.winding = 0,
-					.hasIncrements = false,
-					.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
-				});
-			}
-		}
+		//
+		//const uint32_t tileCount = m_TileCountX * m_TileCountY;
+		//tiles.reserve(tileCount);
+		//
+		//for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
+		//{
+		//	for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
+		//	{
+		//		tiles.push_back(Tile{
+		//			.winding = 0,
+		//			.hasIncrements = false,
+		//			.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
+		//		});
+		//	}
+		//}
 	}
 
 	void Rasterizer::MoveTo(const glm::vec2& point)
@@ -150,10 +150,12 @@ namespace SvgRenderer {
 					int8_t v2 = tileY - prevTileY; // Are we moving from top to bottom, or bottom to top? (1 = from lower tile to higher tile, -1 = opposite)
 					uint32_t currentTileY = v2 == 1 ? prevTileY : tileY;
 
-					uint32_t currentIndex = glm::max(glm::min(GetTileIndexFromRelativePos(v1, currentTileY), static_cast<uint32_t>(tiles.size() - 1)), 0u);
+					const PathRender& path = Globals::AllPaths.paths[pathIndex];
+					uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
+					uint32_t currentIndex = glm::max(glm::min(GetTileIndexFromRelativePos(v1, currentTileY), static_cast<uint32_t>(tileCount - 1)), 0u);
 					for (size_t i = 0; i < currentIndex; i++)
 					{
-						tiles[i].winding += v2;
+						Globals::Tiles.tiles[i + path.startTileIndex].winding += v2;
 					}
 
 					prevTileY = tileY;
@@ -219,16 +221,15 @@ namespace SvgRenderer {
 		}
 	}
 
-	void Rasterizer::Finish(TileBuilder& builder)
+	void Rasterizer::Coarse(TileBuilder& builder)
 	{
-		if (last != first)
-		{
-			LineTo(first);
-		}
+		assert(last == first);
 
-		for (size_t i = 0; i < tiles.size(); i++)
+		const PathRender& path = Globals::AllPaths.paths[pathIndex];
+		uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
+		for (size_t i = 0; i < tileCount; i++)
 		{
-			const Tile& tile = tiles[i];
+			const Tile& tile = Globals::Tiles.tiles[i + path.startTileIndex];
 			if (!tile.hasIncrements)
 			{
 				continue;
@@ -237,11 +238,12 @@ namespace SvgRenderer {
 			Tile* nextTile = nullptr;
 			const int32_t tileY = GetTileYFromAbsoluteIndex(i);
 			int32_t nextTileX;
-			for (size_t j = i + 1; j < tiles.size() && GetTileYFromAbsoluteIndex(j) == tileY; j++)
+
+			for (size_t j = i + 1; j < tileCount && GetTileYFromAbsoluteIndex(j) == tileY; j++)
 			{
-				if (tiles[j].hasIncrements)
+				if (Globals::Tiles.tiles[j + path.startTileIndex].hasIncrements)
 				{
-					nextTile = &tiles[j];
+					nextTile = &Globals::Tiles.tiles[j + path.startTileIndex];
 					nextTileX = GetTileXFromAbsoluteIndex(j);
 					break;
 				}
@@ -254,18 +256,37 @@ namespace SvgRenderer {
 				if (GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
 				{
 					int32_t width = nextTileX - tileX - 1;
-					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE);
+					//builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE);
+
+					std::array<uint8_t, TILE_SIZE* TILE_SIZE> tileData;
+					for (uint32_t y = 0; y < TILE_SIZE; y++)
+					{
+						for (uint32_t x = 0; x < TILE_SIZE; x++)
+						{
+							tileData[y * TILE_SIZE + x] = 255.0f;
+						}
+					}
+
+					for (int32_t i = tileX + 1; i < nextTileX; i++)
+					{
+						builder.Tile(i * TILE_SIZE, tileY * TILE_SIZE, tileData);
+					}
 				}
 			}
 		}
+	}
 
+	void Rasterizer::Finish(TileBuilder& builder)
+	{
 		std::array<float, TILE_SIZE * TILE_SIZE> areas{};
 		std::array<float, TILE_SIZE * TILE_SIZE> heights{};
 		std::array<float, TILE_SIZE> coverage{};
 
-		for (uint32_t i = 0; i < tiles.size(); i++)
+		const PathRender& path = Globals::AllPaths.paths[pathIndex];
+		uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
+		for (uint32_t i = 0; i < tileCount; i++)
 		{
-			const Tile& tile = tiles[i];
+			const Tile& tile = Globals::Tiles.tiles[i + path.startTileIndex];
 			if (!tile.hasIncrements)
 			{
 				continue;
@@ -307,11 +328,11 @@ namespace SvgRenderer {
 			std::fill(heights.begin(), heights.end(), 0.0f);
 
 			Tile* nextTile = nullptr; // Next active tile in the same y-coord, same as the previous one, could be optimized and only done once
-			for (size_t j = i + 1; j < tiles.size() && GetTileYFromAbsoluteIndex(j) == tileY; j++)
+			for (size_t j = i + 1; j < tileCount && GetTileYFromAbsoluteIndex(j) == tileY; j++)
 			{
-				if (tiles[j].hasIncrements)
+				if (Globals::Tiles.tiles[j + path.startTileIndex].hasIncrements)
 				{
-					nextTile = &tiles[j];
+					nextTile = &Globals::Tiles.tiles[j + path.startTileIndex];
 					break;
 				}
 			}

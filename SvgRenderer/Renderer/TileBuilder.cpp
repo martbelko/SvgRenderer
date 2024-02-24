@@ -2,6 +2,8 @@
 
 #include "Core/Base.h"
 
+#include <glm/glm.hpp>
+
 namespace SvgRenderer {
 
 	TileBuilder::TileBuilder()
@@ -31,17 +33,17 @@ namespace SvgRenderer {
 			.color = color,
 		});
 		vertices.push_back(Vertex{
-			.pos = { int32_t(x + TILE_SIZE), y },
+			.pos = { static_cast<int32_t>(glm::floor(x + TILE_SIZE)), y },
 			.uv = { u2, v1 },
 			.color = color,
 			});
 		vertices.push_back(Vertex{
-			.pos = { int32_t(x + TILE_SIZE), int32_t(y + TILE_SIZE) },
+			.pos = { static_cast<int32_t>(glm::floor(x + TILE_SIZE)), static_cast<int32_t>(glm::floor(y + TILE_SIZE)) },
 			.uv = { u2, v2 },
 			.color = color,
 			});
 		vertices.push_back(Vertex{
-			.pos = { x, int32_t(y + TILE_SIZE) },
+			.pos = { x, static_cast<int32_t>(glm::floor(y + TILE_SIZE)) },
 			.uv = { u1, v2 },
 			.color = color,
 			});
@@ -83,17 +85,17 @@ namespace SvgRenderer {
 			.color = color,
 		});
 		vertices.push_back(Vertex{
-			.pos = { int32_t(x + width), y },
+			.pos = { static_cast<int32_t>(glm::floor(x + width)), y },
 			.uv = { 0, 0 },
 			.color = color,
 		});
 		vertices.push_back(Vertex{
-			.pos = { int32_t(x + width), int32_t(y + TILE_SIZE) } ,
+			.pos = { static_cast<int32_t>(glm::floor(x + width)), static_cast<int32_t>(glm::floor(y + TILE_SIZE)) } ,
 			.uv = { 0, 0 },
 			.color = color,
 		});
 		vertices.push_back(Vertex{
-			.pos = { x, int32_t(y + TILE_SIZE) },
+			.pos = { x, static_cast<int32_t>(glm::floor(y + TILE_SIZE)) },
 			.uv = { 0, 0 },
 			.color = color,
 		});

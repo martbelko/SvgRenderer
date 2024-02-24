@@ -2,6 +2,7 @@
 
 #include "Core/Filesystem.h"
 #include "Core/SvgParser.h"
+#include "Core/Timer.h"
 
 #include "Renderer/VertexBuffer.h"
 #include "Renderer/IndexBuffer.h"
@@ -522,6 +523,7 @@ namespace SvgRenderer {
 
 		// This actually fills information about colors and other attributes from the SVG root node
 		Render(root, m_TileBuilder);
+		delete root;
 
 		// Everything after this line may be done in each frame
 
@@ -544,7 +546,6 @@ namespace SvgRenderer {
 			TransformPath(pathIndex);
 		}
 #endif
-
 		// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
 #if ASYNC == 1
 		auto getPreviousPoint = [](const PathRender& path, uint32_t index) -> glm::vec2
@@ -735,6 +736,63 @@ namespace SvgRenderer {
 #endif
 		// 4.step: The rest
 #if ASYNC == 1
+		// 4.1 Calculate correct indices for each path according to its bounding box
+		Globals::Tiles.tiles.reserve(1'371'279); // This remains fixed, may change in the future
+
+		{
+			std::atomic_uint32_t tileCount = 0;
+			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+			{
+				PathRender& path = Globals::AllPaths.paths[pathIndex];
+				if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
+				{
+					continue;
+				}
+
+				const int32_t minBboxCoordX = glm::floor(path.bbox.min.x);
+				const int32_t minBboxCoordY = glm::floor(path.bbox.min.y);
+				const int32_t maxBboxCoordX = glm::ceil(path.bbox.max.x);
+				const int32_t maxBboxCoordY = glm::ceil(path.bbox.max.y);
+
+				const int32_t minTileCoordX = glm::floor(static_cast<float>(minBboxCoordX) / TILE_SIZE);
+				const int32_t minTileCoordY = glm::floor(static_cast<float>(minBboxCoordY) / TILE_SIZE);
+				const int32_t maxTileCoordX = glm::ceil(static_cast<float>(maxBboxCoordX) / TILE_SIZE);
+				const int32_t maxTileCoordY = glm::ceil(static_cast<float>(maxBboxCoordY) / TILE_SIZE);
+
+				uint32_t m_TileStartX = minTileCoordX;
+				uint32_t m_TileStartY = minTileCoordY;
+				uint32_t m_TileCountX = maxTileCoordX - minTileCoordX + 1;
+				uint32_t m_TileCountY = maxTileCoordY - minTileCoordY + 1;
+
+				const uint32_t count = m_TileCountX * m_TileCountY;
+				path.startTileIndex = count;
+
+				for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
+				{
+					for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
+					{
+						Globals::Tiles.tiles.push_back(Tile{
+							.winding = 0,
+							.hasIncrements = false,
+							.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
+							});
+					}
+				}
+
+				tileCount += count;
+			}
+		}
+
+		uint32_t tileCount = 0;
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+		{
+			PathRender& path = Globals::AllPaths.paths[pathIndex];
+			uint32_t count = path.startTileIndex;
+			path.startTileIndex = tileCount;
+			tileCount += count;
+			path.endTileIndex = tileCount - 1;
+		}
+
 		uint32_t cc = 0;
 		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
@@ -745,13 +803,14 @@ namespace SvgRenderer {
 				continue;
 			}
 
-			Rasterizer rast(path.bbox);
+			Rasterizer rast(path.bbox, pathIndex);
 			rast.FillFromArray(pathIndex);
 
 			m_TileBuilder.color = path.color;
+			rast.Coarse(m_TileBuilder);
 			rast.Finish(m_TileBuilder);
 
-			cc += rast.tiles.size();
+			//cc += rast.tiles.size();
 
 			if (++total % 10000 == 0)
 			{
@@ -879,6 +938,8 @@ namespace SvgRenderer {
 		m_Running = true;
 		while (m_Running)
 		{
+			Timer timer;
+
 			glClearColor(1.0, 1.0, 1.0, 1.0);
 			glClear(GL_COLOR_BUFFER_BIT);
 			glDrawElements(
@@ -888,7 +949,9 @@ namespace SvgRenderer {
 				nullptr
 			);
 
-			glFinish();
+			//glFinish();
+
+			SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
 
 			m_Window->OnUpdate();
 		}

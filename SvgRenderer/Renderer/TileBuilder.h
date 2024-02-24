@@ -1,12 +1,11 @@
 #pragma once
 
+#include "Renderer/Defs.h"
+
 #include <array>
 #include <vector>
 
 namespace SvgRenderer {
-
-	constexpr int8_t TILE_SIZE = 8;
-	constexpr uint32_t ATLAS_SIZE = 4096 * 2;
 
 	struct Vertex
 	{

@@ -27,6 +27,8 @@ namespace SvgRenderer {
 	{
 		uint32_t startCmdIndex;
 		uint32_t endCmdIndex;
+		uint32_t startTileIndex;
+		uint32_t endTileIndex;
 		glm::mat3 transform;
 		std::array<uint8_t, 4> color;
 		BoundingBox bbox;
@@ -48,9 +50,26 @@ namespace SvgRenderer {
 		std::vector<SimpleCommand> simpleCommands;
 	};
 
+	struct Increment
+	{
+		float area = 0;
+		float height = 0;
+	};
+
+	constexpr float TOLERANCE = 0.05f;
+	constexpr int8_t TILE_SIZE = 16;
+	constexpr uint32_t ATLAS_SIZE = 4096 * 2;
+
+	struct Tile
+	{
+		int32_t winding = 0;
+		bool hasIncrements = false;
+		std::array<Increment, TILE_SIZE * TILE_SIZE> increments;
+	};
+
 	struct TilesContainer
 	{
-		// std::vector<Tile> tiles;
+		std::vector<Tile> tiles;
 	};
 
 	class Globals
