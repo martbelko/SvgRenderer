@@ -256,21 +256,21 @@ namespace SvgRenderer {
 				if (GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
 				{
 					int32_t width = nextTileX - tileX - 1;
-					//builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE);
+					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE);
 
-					std::array<uint8_t, TILE_SIZE* TILE_SIZE> tileData;
-					for (uint32_t y = 0; y < TILE_SIZE; y++)
-					{
-						for (uint32_t x = 0; x < TILE_SIZE; x++)
-						{
-							tileData[y * TILE_SIZE + x] = 255.0f;
-						}
-					}
-
-					for (int32_t i = tileX + 1; i < nextTileX; i++)
-					{
-						builder.Tile(i * TILE_SIZE, tileY * TILE_SIZE, tileData);
-					}
+					//std::array<uint8_t, TILE_SIZE* TILE_SIZE> tileData;
+					//for (uint32_t y = 0; y < TILE_SIZE; y++)
+					//{
+					//	for (uint32_t x = 0; x < TILE_SIZE; x++)
+					//	{
+					//		tileData[y * TILE_SIZE + x] = 255.0f;
+					//	}
+					//}
+					//
+					//for (int32_t i = tileX + 1; i < nextTileX; i++)
+					//{
+					//	builder.Tile(i * TILE_SIZE, tileY * TILE_SIZE, tileData);
+					//}
 				}
 			}
 		}

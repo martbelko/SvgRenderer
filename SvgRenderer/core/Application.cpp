@@ -518,7 +518,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -530,16 +530,35 @@ namespace SvgRenderer {
 #define ASYNC 1
 		// 1.step: Transform the paths
 #if ASYNC == 1
-		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.commands.size());
-			std::iota(indices.begin(), indices.end(), 0);
+		//GLuint buf;
+		//glCreateBuffers(1, &buf);
+		//
+		//GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
+		//glNamedBufferStorage(buf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
+		//
+		//// glNamedBufferData(buf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), GL_STREAM_DRAW);
+		//assert(glGetError() == GL_NO_ERROR);
+		//
+		//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, buf);
+		//assert(glGetError() == GL_NO_ERROR);
+		//
+		//Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
+		//assert(glGetError() == GL_NO_ERROR);
+		//shader->Dispatch(Globals::AllPaths.commands.size(), 1, 1);
+		//assert(glGetError() == GL_NO_ERROR);
+		//
+		//glFinish();
+		//
+		//glGetNamedBufferSubData(buf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
 
-			std::for_each(std::execution::par, indices.begin(), indices.end(), [](uint32_t cmdIndex)
-			{
-				TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
-			});
-		}
+		std::vector<uint32_t> indices;
+		indices.resize(Globals::AllPaths.commands.size());
+		std::iota(indices.begin(), indices.end(), 0);
+
+		std::for_each(std::execution::par, indices.begin(), indices.end(), [](uint32_t cmdIndex)
+		{
+			TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
+		});
 #else
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
 		{
@@ -737,7 +756,7 @@ namespace SvgRenderer {
 		// 4.step: The rest
 #if ASYNC == 1
 		// 4.1 Calculate correct indices for each path according to its bounding box
-		Globals::Tiles.tiles.reserve(1'371'279); // This remains fixed, may change in the future
+		Globals::Tiles.tiles.reserve(561'367); // This remains fixed for the whole run of the program, may change in the future
 
 		{
 			std::atomic_uint32_t tileCount = 0;
@@ -792,6 +811,8 @@ namespace SvgRenderer {
 			tileCount += count;
 			path.endTileIndex = tileCount - 1;
 		}
+
+		SR_TRACE("{0}", tileCount);
 
 		uint32_t cc = 0;
 		uint32_t total = 0;

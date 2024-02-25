@@ -45,8 +45,6 @@ namespace SvgRenderer {
 			return m_TileStartY + offset;
 		}
 
-		uint32_t m_Width, m_Height;
-
 		int32_t m_TileStartX, m_TileStartY;
 		uint32_t m_TileCountX, m_TileCountY;
 
