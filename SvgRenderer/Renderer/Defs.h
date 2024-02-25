@@ -29,9 +29,12 @@ namespace SvgRenderer {
 		uint32_t endCmdIndex;
 		uint32_t startTileIndex;
 		uint32_t endTileIndex;
-		glm::mat3 transform;
-		std::array<uint8_t, 4> color;
+		glm::mat4 transform;
 		BoundingBox bbox;
+		std::array<uint8_t, 4> color;
+		uint32_t _pad0;
+		uint32_t _pad1;
+		uint32_t _pad2;
 	};
 
 	struct PathRenderCmd
@@ -39,8 +42,9 @@ namespace SvgRenderer {
 		uint32_t pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
 		uint32_t startIndexSimpleCommands;
 		uint32_t endIndexSimpleCommands;
-		std::array<glm::vec2, 3> points; // Maybe unused, but maximum 3 points for cubicTo
-		std::array<glm::vec2, 3> transformedPoints; // Maybe unused, but maximum 3 points for cubicTo
+		uint32_t _pad0;
+		std::array<glm::vec2, 4> points; // Maybe unused, but maximum 3 points for cubicTo
+		std::array<glm::vec2, 4> transformedPoints; // Maybe unused, but maximum 3 points for cubicTo
 	};
 
 	struct PathsContainer

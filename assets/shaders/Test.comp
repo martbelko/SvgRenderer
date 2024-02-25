@@ -2,21 +2,25 @@
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
+#define GET_CMD_PATH_INDEX(value) (value >> 16)
+
 struct BoundingBox
 {
-	vec2 min;
-	vec2 max;
+	vec4 minmax;
 };
 
-struct PathRender
+struct Path
 {
 	uint startCmdIndex;
 	uint endCmdIndex;
 	uint startTileIndex;
 	uint endTileIndex;
-	mat3 transform;
-	uint color[4];
+	mat4 transform;
 	BoundingBox bbox;
+	uint color;
+	uint _pad0;
+	uint _pad1;
+	uint _pad2;
 };
 
 struct Command
@@ -24,24 +28,69 @@ struct Command
 	uint pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
 	uint startIndexSimpleCommands;
 	uint endIndexSimpleCommands;
-	float points[3][2]; // Maybe unused, but maximum 3 points for cubicTo
-	float transformedPoints[3][2]; // Maybe unused, but maximum 3 points for cubicTo
+	uint _pad0;
+	vec2 points[4]; // Maybe unused, but maximum 3 points for cubicTo
+	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
 };
 
-layout(std430, binding = 0) buffer Pos
+layout(location = 0) uniform mat3 u_GlobalTransform;
+
+layout(std430, binding = 0) buffer Paths
+{
+	Path paths[];
+};
+
+layout(std430, binding = 1) buffer Commands
 {
 	Command commands[];
 };
 
 void main()
 {
-	uint index = gl_GlobalInvocationID.x; // Identify the thread, use it to lookup some data.
+	uint index = gl_GlobalInvocationID.y * gl_NumWorkGroups.x + gl_GlobalInvocationID.x;
+	if (index > 2451)
+	{
+		return;
+	}
 
-	//commands[index].points[0] = commands[index].points[0];
-	//commands[index].points[1] = commands[index].points[0];
-	//commands[index].points[2] = commands[index].points[0];
+	uint pathIndex = GET_CMD_PATH_INDEX(commands[index].pathIndexCmdType);
+	//mat3 t = mat3(
+	//	paths[pathIndex].transform[0][0], paths[pathIndex].transform[0][1], paths[pathIndex].transform[0][2],
+	//	paths[pathIndex].transform[1][0], paths[pathIndex].transform[1][1], paths[pathIndex].transform[1][2],
+	//	paths[pathIndex].transform[2][0], paths[pathIndex].transform[2][1], paths[pathIndex].transform[2][2]
+	//);
+	//mat3 t = mat3(
+	//	paths[pathIndex].transform[0][0], paths[pathIndex].transform[1][0], paths[pathIndex].transform[2][0],
+	//	paths[pathIndex].transform[0][1], paths[pathIndex].transform[1][1], paths[pathIndex].transform[2][1],
+	//	paths[pathIndex].transform[0][2], paths[pathIndex].transform[1][2], paths[pathIndex].transform[2][2]
+	//);
 
-	commands[index].points[0][0] = 100;
-	commands[index].points[1][0] = 100;
-	commands[index].points[2][0] = 100;
+	vec2 p1 = commands[index].points[0];
+	vec2 p2 = commands[index].points[1];
+	vec2 p3 = commands[index].points[2];
+
+	vec2 v1 = (paths[pathIndex].transform * vec4(p1, 1.0, 1.0)).xy;
+	vec2 v2 = (paths[pathIndex].transform * vec4(p2, 1.0, 1.0)).xy;
+	vec2 v3 = (paths[pathIndex].transform * vec4(p3, 1.0, 1.0)).xy;
+
+	//commands[index].points[0][0] = 100;
+	//commands[index].points[1][0] = 100;
+	//commands[index].points[2][0] = 100;
+	//commands[index].points[0][1] = 200;
+	//commands[index].points[1][1] = 200;
+	//commands[index].points[2][1] = 200;
+
+	//commands[index].transformedPoints[0][0] = paths[pathIndex].transform[0][0];
+	//commands[index].transformedPoints[0][1] = paths[pathIndex].transform[0][1];
+	//commands[index].transformedPoints[1][0] = paths[pathIndex].transform[0][2];
+	//commands[index].transformedPoints[1][1] = paths[pathIndex].transform[1][0];
+	//commands[index].transformedPoints[2][0] = paths[pathIndex].transform[1][1];
+	//commands[index].transformedPoints[2][1] = paths[pathIndex].transform[1][2];
+
+	commands[index].transformedPoints[0][0] = v1.x;
+	commands[index].transformedPoints[0][1] = v1.y;
+	commands[index].transformedPoints[1][0] = v2.x;
+	commands[index].transformedPoints[1][1] = v2.y;
+	commands[index].transformedPoints[2][0] = v3.x;
+	commands[index].transformedPoints[2][1] = v3.y;
 }
