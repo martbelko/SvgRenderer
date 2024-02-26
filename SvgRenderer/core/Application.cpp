@@ -880,7 +880,6 @@ namespace SvgRenderer {
 			uint32_t visibleCount = path.startVisibleTileIndex;
 			path.startVisibleTileIndex = visibleTileCount;
 			visibleTileCount += visibleCount;
-			path.endVisibleTileIndex = visibleTileCount - 1;
 		}
 
 		SR_TRACE("{0}", tileCount);

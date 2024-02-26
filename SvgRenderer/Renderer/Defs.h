@@ -33,12 +33,8 @@ namespace SvgRenderer {
 		BoundingBox bbox;
 		std::array<uint8_t, 4> color;
 		uint32_t startVisibleTileIndex;
-		uint32_t endVisibleTileIndex;
 		uint32_t startSpanQuadIndex;
 		uint32_t startTileQuadIndex;
-		uint32_t _pad0;
-		uint32_t _pad1;
-		uint32_t _pad2;
 	};
 
 	struct PathRenderCmd
