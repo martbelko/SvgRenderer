@@ -18,6 +18,10 @@ struct Path
 	mat4 transform;
 	BoundingBox bbox;
 	uint color;
+	uint startVisibleTileIndex;
+	uint endVisibleTileIndex;
+	uint startSpanQuadIndex;
+	uint startTileQuadIndex;
 	uint _pad0;
 	uint _pad1;
 	uint _pad2;
@@ -54,16 +58,6 @@ void main()
 	}
 
 	uint pathIndex = GET_CMD_PATH_INDEX(commands[index].pathIndexCmdType);
-	//mat3 t = mat3(
-	//	paths[pathIndex].transform[0][0], paths[pathIndex].transform[0][1], paths[pathIndex].transform[0][2],
-	//	paths[pathIndex].transform[1][0], paths[pathIndex].transform[1][1], paths[pathIndex].transform[1][2],
-	//	paths[pathIndex].transform[2][0], paths[pathIndex].transform[2][1], paths[pathIndex].transform[2][2]
-	//);
-	//mat3 t = mat3(
-	//	paths[pathIndex].transform[0][0], paths[pathIndex].transform[1][0], paths[pathIndex].transform[2][0],
-	//	paths[pathIndex].transform[0][1], paths[pathIndex].transform[1][1], paths[pathIndex].transform[2][1],
-	//	paths[pathIndex].transform[0][2], paths[pathIndex].transform[1][2], paths[pathIndex].transform[2][2]
-	//);
 
 	vec2 p1 = commands[index].points[0];
 	vec2 p2 = commands[index].points[1];
@@ -74,20 +68,6 @@ void main()
 	vec2 v1 = (trans * vec4(p1, 1.0, 1.0)).xy;
 	vec2 v2 = (trans * vec4(p2, 1.0, 1.0)).xy;
 	vec2 v3 = (trans * vec4(p3, 1.0, 1.0)).xy;
-
-	//commands[index].points[0][0] = 100;
-	//commands[index].points[1][0] = 100;
-	//commands[index].points[2][0] = 100;
-	//commands[index].points[0][1] = 200;
-	//commands[index].points[1][1] = 200;
-	//commands[index].points[2][1] = 200;
-
-	//commands[index].transformedPoints[0][0] = paths[pathIndex].transform[0][0];
-	//commands[index].transformedPoints[0][1] = paths[pathIndex].transform[0][1];
-	//commands[index].transformedPoints[1][0] = paths[pathIndex].transform[0][2];
-	//commands[index].transformedPoints[1][1] = paths[pathIndex].transform[1][0];
-	//commands[index].transformedPoints[2][0] = paths[pathIndex].transform[1][1];
-	//commands[index].transformedPoints[2][1] = paths[pathIndex].transform[1][2];
 
 	commands[index].transformedPoints[0][0] = v1.x;
 	commands[index].transformedPoints[0][1] = v1.y;

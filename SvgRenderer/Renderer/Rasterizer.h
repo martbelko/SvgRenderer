@@ -60,6 +60,8 @@ namespace SvgRenderer {
 		void CommandFromArray(const PathRenderCmd& command, const glm::vec2& lastPoint);
 		void FillFromArray(uint32_t pathIndex);
 
+		std::pair<uint32_t, uint32_t> CalculateNumberOfQuads();
+
 		void Coarse(TileBuilder& builder);
 		void Finish(TileBuilder& builder);
 	};

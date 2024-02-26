@@ -472,6 +472,7 @@ namespace SvgRenderer {
 		case MOVE_TO:
 		case LINE_TO:
 		{
+			// TODO: Just for debugging
 			glm::vec2 xx = cmd->transformedPoints[0];
 
 			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
@@ -556,11 +557,8 @@ namespace SvgRenderer {
 
 		Renderer::Init(initWidth, initHeight);
 
-		int maxTextureSize;
-		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
-
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -603,27 +601,6 @@ namespace SvgRenderer {
 		glFinish();
 
 		glGetNamedBufferSubData(buf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
-		//for (uint32_t i = 0; i < Globals::AllPaths.commands.size(); i++)
-		//{
-		//	if (Globals::AllPaths.commands[i].points[0].x != 100.0f)
-		//	{
-		//		std::cout << i << '\n';
-		//		std::cout << Globals::AllPaths.commands[i].points[0].x << '\n';
-		//		exit(-1);
-		//	}
-		//	if (Globals::AllPaths.commands[i].points[1].x != 100.0f)
-		//	{
-		//		std::cout << i << '\n';
-		//		std::cout << Globals::AllPaths.commands[i].points[1].x << '\n';
-		//		exit(-1);
-		//	}
-		//	if (Globals::AllPaths.commands[i].points[2].x != 100.0f)
-		//	{
-		//		std::cout << i << '\n';
-		//		std::cout << Globals::AllPaths.commands[i].points[2].x << '\n';
-		//		exit(-1);
-		//	}
-		//}
 
 		std::vector<uint32_t> indices;
 		indices.resize(Globals::AllPaths.commands.size());
@@ -829,7 +806,7 @@ namespace SvgRenderer {
 #endif
 		// 4.step: The rest
 #if ASYNC == 1
-		// 4.1 Calculate correct indices for each path according to its bounding box
+		// 4.1 Calculate correct tile indices for each path according to its bounding box
 		Globals::Tiles.tiles.reserve(561'367); // This remains fixed for the whole run of the program, may change in the future
 
 		{
@@ -844,7 +821,6 @@ namespace SvgRenderer {
 				}
 
 				// TODO: We are not interested in tiles, where x-coord of the tile is above SCREEN_WIDTH, or y-coord is above SCREEN_HEIGHT
-
 				const int32_t minBboxCoordX = glm::floor(path.bbox.min.x);
 				const int32_t minBboxCoordY = glm::floor(path.bbox.min.y);
 				const int32_t maxBboxCoordX = glm::ceil(path.bbox.max.x);
@@ -908,6 +884,28 @@ namespace SvgRenderer {
 		SR_TRACE("{0}", tileCount);
 		SR_TRACE("{0}", visibleTileCount);
 
+		// 4.2 Calculate corrent count and indices for vertices of each path
+		uint32_t accumCount = 0;
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+		{
+			PathRender& path = Globals::AllPaths.paths[pathIndex];
+			if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
+			{
+				continue;
+			}
+
+			Rasterizer rast(path.bbox, pathIndex);
+			rast.FillFromArray(pathIndex);
+
+			auto [coarseQuadCount, fineQuadCount] = rast.CalculateNumberOfQuads();
+			path.startSpanQuadIndex = accumCount;
+			path.startTileQuadIndex = accumCount + coarseQuadCount;
+			accumCount += coarseQuadCount + fineQuadCount;
+		}
+
+		m_TileBuilder.vertices.resize(accumCount * 4);
+
+		// 4.3 The rest
 		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
@@ -918,7 +916,6 @@ namespace SvgRenderer {
 			}
 
 			Rasterizer rast(path.bbox, pathIndex);
-			rast.FillFromArray(pathIndex);
 
 			m_TileBuilder.color = path.color;
 			rast.Coarse(m_TileBuilder);

@@ -139,7 +139,7 @@ namespace SvgRenderer {
 					const PathRender& path = Globals::AllPaths.paths[pathIndex];
 					uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
 					uint32_t currentIndex = glm::max(glm::min(GetTileIndexFromRelativePos(v1, currentTileY), static_cast<uint32_t>(tileCount - 1)), 0u);
-					for (size_t i = 0; i < currentIndex; i++)
+					for (uint32_t i = 0; i < currentIndex; i++)
 					{
 						Globals::Tiles.tiles[i + path.startTileIndex].winding += v2;
 					}
@@ -207,15 +207,17 @@ namespace SvgRenderer {
 		}
 	}
 
-	void Rasterizer::Coarse(TileBuilder& builder)
+	std::pair<uint32_t, uint32_t> Rasterizer::CalculateNumberOfQuads()
 	{
-		assert(last == first);
-
 		const PathRender& path = Globals::AllPaths.paths[pathIndex];
 		uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
-		for (size_t i = 0; i < tileCount; i++)
+
+		uint32_t coarseQuadCount = 0;
+
+		// Coarse
+		for (uint32_t i = 0; i < tileCount; i++)
 		{
-			const Tile& tile = Globals::Tiles.tiles[i + path.startTileIndex];
+			Tile& tile = Globals::Tiles.tiles[i + path.startTileIndex];
 			if (!tile.hasIncrements)
 			{
 				continue;
@@ -225,12 +227,13 @@ namespace SvgRenderer {
 			const int32_t tileY = GetTileYFromAbsoluteIndex(i);
 			int32_t nextTileX;
 
-			for (size_t j = i + 1; j < tileCount && GetTileYFromAbsoluteIndex(j) == tileY; j++)
+			for (uint32_t j = i + 1; j < tileCount && GetTileYFromAbsoluteIndex(j) == tileY; j++)
 			{
 				if (Globals::Tiles.tiles[j + path.startTileIndex].hasIncrements)
 				{
 					nextTile = &Globals::Tiles.tiles[j + path.startTileIndex];
 					nextTileX = GetTileXFromAbsoluteIndex(j);
+					tile.nextTileIndex = j + path.startTileIndex;
 					break;
 				}
 			}
@@ -239,10 +242,63 @@ namespace SvgRenderer {
 			{
 				const int32_t tileX = GetTileXFromAbsoluteIndex(i);
 				// If the winding is nonzero, span the whole tile
-				if (GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
+				if (tileX >= 0 && tileY >= 0 && tileX <= (SCREEN_WIDTH / TILE_SIZE) && tileY <= (SCREEN_HEIGHT / TILE_SIZE)
+				    && GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
 				{
+					coarseQuadCount++;
+				}
+			}
+		}
+
+		// Fine
+		uint32_t fineQuadCount = 0;
+		for (uint32_t i = 0; i < tileCount; i++)
+		{
+			const Tile& tile = Globals::Tiles.tiles[i + path.startTileIndex];
+			if (!tile.hasIncrements)
+			{
+				continue;
+			}
+
+			int32_t tileX = GetTileXFromAbsoluteIndex(i);
+			int32_t tileY = GetTileYFromAbsoluteIndex(i);
+			if (tileX >= 0 && tileY >= 0 && tileX <= (SCREEN_WIDTH / TILE_SIZE) && tileY <= (SCREEN_HEIGHT / TILE_SIZE))
+			{
+				fineQuadCount++;
+			}
+		}
+
+		return std::make_pair(coarseQuadCount, fineQuadCount);
+	}
+
+	void Rasterizer::Coarse(TileBuilder& builder)
+	{
+		assert(last == first);
+
+		const PathRender& path = Globals::AllPaths.paths[pathIndex];
+		uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
+		uint32_t quadIndex = path.startSpanQuadIndex;
+
+		for (uint32_t i = 0; i < tileCount; i++)
+		{
+			const Tile& tile = Globals::Tiles.tiles[i + path.startTileIndex];
+			if (!tile.hasIncrements)
+			{
+				continue;
+			}
+
+			Tile* nextTile = tile.nextTileIndex == std::numeric_limits<uint32_t>::max() ? nullptr : &Globals::Tiles.tiles[tile.nextTileIndex];
+			if (nextTile != nullptr)
+			{
+				const int32_t tileX = GetTileXFromAbsoluteIndex(i);
+				const int32_t tileY = GetTileYFromAbsoluteIndex(i);
+				// If the winding is nonzero, span the whole tile
+				if (tileX >= 0 && tileY >= 0 && tileX <= (SCREEN_WIDTH / TILE_SIZE) && tileY <= (SCREEN_HEIGHT / TILE_SIZE)
+				    && GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
+				{
+					int32_t nextTileX = GetTileXFromAbsoluteIndex(tile.nextTileIndex - path.startTileIndex);
 					int32_t width = nextTileX - tileX - 1;
-					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE);
+					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE, quadIndex++);
 				}
 			}
 		}
@@ -256,6 +312,8 @@ namespace SvgRenderer {
 
 		const PathRender& path = Globals::AllPaths.paths[pathIndex];
 		uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
+		uint32_t quadIndex = path.startTileQuadIndex;
+
 		for (uint32_t i = 0; i < tileCount; i++)
 		{
 			const Tile& tile = Globals::Tiles.tiles[i + path.startTileIndex];
@@ -294,25 +352,16 @@ namespace SvgRenderer {
 
 			int32_t tileX = GetTileXFromAbsoluteIndex(i);
 			int32_t tileY = GetTileYFromAbsoluteIndex(i);
-
 			if (tileX >= 0 && tileY >= 0 && tileX <= (SCREEN_WIDTH / TILE_SIZE) && tileY <= (SCREEN_HEIGHT / TILE_SIZE))
 			{
-				builder.Tile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData, i + path.startVisibleTileIndex);
+				builder.Tile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData, i + path.startVisibleTileIndex, quadIndex++);
 			}
 
 			std::fill(areas.begin(), areas.end(), 0.0f);
 			std::fill(heights.begin(), heights.end(), 0.0f);
 
-			Tile* nextTile = nullptr; // Next active tile in the same y-coord, same as the previous one, could be optimized and only done once
-			for (size_t j = i + 1; j < tileCount && GetTileYFromAbsoluteIndex(j) == tileY; j++)
-			{
-				if (Globals::Tiles.tiles[j + path.startTileIndex].hasIncrements)
-				{
-					nextTile = &Globals::Tiles.tiles[j + path.startTileIndex];
-					break;
-				}
-			}
-
+			// Next active tile in the same y-coord, same as the previous one, could be optimized and only done once
+			Tile* nextTile = tile.nextTileIndex == std::numeric_limits<uint32_t>::max() ? nullptr : &Globals::Tiles.tiles[tile.nextTileIndex];
 			if (nextTile == nullptr)
 			{
 				std::fill(coverage.begin(), coverage.end(), 0.0f);
