@@ -298,7 +298,7 @@ namespace SvgRenderer {
 				{
 					int32_t nextTileX = GetTileXFromAbsoluteIndex(tile.nextTileIndex - path.startTileIndex);
 					int32_t width = nextTileX - tileX - 1;
-					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE, quadIndex++);
+					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE, quadIndex++, Globals::AllPaths.paths[pathIndex].color);
 				}
 			}
 		}
@@ -313,6 +313,7 @@ namespace SvgRenderer {
 		const PathRender& path = Globals::AllPaths.paths[pathIndex];
 		uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
 		uint32_t quadIndex = path.startTileQuadIndex;
+		uint32_t tileIndex = path.startVisibleTileIndex;
 
 		for (uint32_t i = 0; i < tileCount; i++)
 		{
@@ -354,7 +355,7 @@ namespace SvgRenderer {
 			int32_t tileY = GetTileYFromAbsoluteIndex(i);
 			if (tileX >= 0 && tileY >= 0 && tileX <= (SCREEN_WIDTH / TILE_SIZE) && tileY <= (SCREEN_HEIGHT / TILE_SIZE))
 			{
-				builder.Tile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData, i + path.startVisibleTileIndex, quadIndex++);
+				builder.Tile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData, tileIndex++, quadIndex++, Globals::AllPaths.paths[pathIndex].color);
 			}
 
 			std::fill(areas.begin(), areas.end(), 0.0f);

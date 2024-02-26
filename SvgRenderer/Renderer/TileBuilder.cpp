@@ -18,7 +18,7 @@ namespace SvgRenderer {
 		}
 	}
 
-	void TileBuilder::Tile(int32_t x, int32_t y, const std::array<uint8_t, TILE_SIZE * TILE_SIZE>& data, uint32_t tileOffset, uint32_t quadIndex)
+	void TileBuilder::Tile(int32_t x, int32_t y, const std::array<uint8_t, TILE_SIZE * TILE_SIZE>& data, uint32_t tileOffset, uint32_t quadIndex, const std::array<uint8_t, 4>& color)
 	{
 		size_t base = quadIndex * 4;
 
@@ -64,7 +64,7 @@ namespace SvgRenderer {
 		}
 	}
 
-	void TileBuilder::Span(int32_t x, int32_t y, uint32_t width, uint32_t quadIndex)
+	void TileBuilder::Span(int32_t x, int32_t y, uint32_t width, uint32_t quadIndex, const std::array<uint8_t, 4>& color)
 	{
 		uint32_t base = quadIndex * 4;
 

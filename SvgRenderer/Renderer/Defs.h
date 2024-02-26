@@ -66,7 +66,7 @@ namespace SvgRenderer {
 
 	constexpr float TOLERANCE = 0.05f;
 	constexpr int8_t TILE_SIZE = 16;
-	constexpr uint32_t ATLAS_SIZE = 1024 * 12;
+	constexpr uint32_t ATLAS_SIZE = 4096 * 2;
 
 	constexpr uint32_t SCREEN_WIDTH = 1900;
 	constexpr uint32_t SCREEN_HEIGHT = 1000;

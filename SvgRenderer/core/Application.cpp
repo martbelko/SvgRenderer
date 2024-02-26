@@ -288,15 +288,15 @@ namespace SvgRenderer {
 			cmds.push_back(PathCmd(LineToCmd{ .p1 = first }));
 		}
 
-		const SvgColor& c = path.fill.color;
-		builder.color = { c.r, c.g, c.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
+		const SvgColor& fillColor = path.fill.color;
+		std::array<uint8_t, 4> color = { fillColor.r, fillColor.g, fillColor.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
 
 		Globals::AllPaths.paths.push_back(PathRender{
 			.startCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size()),
 			.endCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size() + cmds.size() - 1),
 			.transform = path.transform,
 			.bbox = BoundingBox(),
-			.color = builder.color
+			.color = color
 			});
 
 		for (const PathCmd& cmd : cmds)
@@ -362,15 +362,15 @@ namespace SvgRenderer {
 			}
 		}
 
-		const SvgColor& c = path.stroke.color;
-		builder.color = { c.r, c.g, c.b, static_cast<uint8_t>(path.stroke.opacity * 255.0f) };
+		const SvgColor& fillColor = path.fill.color;
+		std::array<uint8_t, 4> color = { fillColor.r, fillColor.g, fillColor.b, static_cast<uint8_t>(path.fill.opacity * 255.0f) };
 
 		Globals::AllPaths.paths.push_back(PathRender{
 			.startCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size()),
 			.endCmdIndex = static_cast<uint32_t>(Globals::AllPaths.commands.size() + cmds.size() - 1),
 			.transform = path.transform,
 			.bbox = BoundingBox(),
-			.color = builder.color
+			.color = color
 		});
 
 		for (const PathCmd& cmd : cmds)
@@ -602,14 +602,16 @@ namespace SvgRenderer {
 
 		glGetNamedBufferSubData(buf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
 
-		std::vector<uint32_t> indices;
-		indices.resize(Globals::AllPaths.commands.size());
-		std::iota(indices.begin(), indices.end(), 0);
-
-		std::for_each(std::execution::seq, indices.begin(), indices.end(), [](uint32_t cmdIndex)
 		{
-			TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
-		});
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.commands.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
+			std::for_each(std::execution::seq, indices.begin(), indices.end(), [](uint32_t cmdIndex)
+			{
+				TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
+			});
+		}
 #else
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
 		{
@@ -886,6 +888,7 @@ namespace SvgRenderer {
 
 		// 4.2 Calculate corrent count and indices for vertices of each path
 		uint32_t accumCount = 0;
+		uint32_t accumTileCount = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -901,6 +904,9 @@ namespace SvgRenderer {
 			path.startSpanQuadIndex = accumCount;
 			path.startTileQuadIndex = accumCount + coarseQuadCount;
 			accumCount += coarseQuadCount + fineQuadCount;
+
+			path.startVisibleTileIndex = accumTileCount;
+			accumTileCount += fineQuadCount;
 		}
 
 		m_TileBuilder.vertices.resize(accumCount * 4);
@@ -919,26 +925,24 @@ namespace SvgRenderer {
 		}
 
 		// 4.3 The rest
-		uint32_t total = 0;
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+		std::vector<uint32_t> indices;
+		indices.resize(Globals::AllPaths.paths.size());
+		std::iota(indices.begin(), indices.end(), 0);
+
+		Timer timer;
+		std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
 			if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
 			{
-				continue;
+				return;
 			}
 
 			Rasterizer rast(path.bbox, pathIndex);
-
-			m_TileBuilder.color = path.color;
 			rast.Coarse(m_TileBuilder);
 			rast.Finish(m_TileBuilder);
-
-			if (++total % 10000 == 0)
-			{
-				SR_TRACE("Processed {0} paths", total);
-			}
-		}
+		});
+		SR_INFO("Time in ms: {0}", timer.ElapsedMillis());
 #else
 		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
@@ -1068,8 +1072,6 @@ namespace SvgRenderer {
 			);
 
 			//glFinish();
-
-			SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
 
 			m_Window->OnUpdate();
 		}
