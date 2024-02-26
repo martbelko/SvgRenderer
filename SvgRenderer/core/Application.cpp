@@ -904,6 +904,19 @@ namespace SvgRenderer {
 		}
 
 		m_TileBuilder.vertices.resize(accumCount * 4);
+		const size_t numberOfIndices = accumCount * 6;
+		m_TileBuilder.indices.reserve(numberOfIndices);
+		uint32_t base = 0;
+		for (size_t i = 0; i < numberOfIndices; i += 6)
+		{
+			m_TileBuilder.indices.push_back(base);
+			m_TileBuilder.indices.push_back(base + 1);
+			m_TileBuilder.indices.push_back(base + 2);
+			m_TileBuilder.indices.push_back(base);
+			m_TileBuilder.indices.push_back(base + 2);
+			m_TileBuilder.indices.push_back(base + 3);
+			base += 4;
+		}
 
 		// 4.3 The rest
 		uint32_t total = 0;
