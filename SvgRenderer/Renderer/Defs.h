@@ -32,8 +32,8 @@ namespace SvgRenderer {
 		glm::mat4 transform;
 		BoundingBox bbox;
 		std::array<uint8_t, 4> color;
-		uint32_t _pad0;
-		uint32_t _pad1;
+		uint32_t startVisibleTileIndex;
+		uint32_t endVisibleTileIndex;
 		uint32_t _pad2;
 	};
 
@@ -62,7 +62,10 @@ namespace SvgRenderer {
 
 	constexpr float TOLERANCE = 0.05f;
 	constexpr int8_t TILE_SIZE = 16;
-	constexpr uint32_t ATLAS_SIZE = 4096 * 2;
+	constexpr uint32_t ATLAS_SIZE = 1024 * 12;
+
+	constexpr uint32_t SCREEN_WIDTH = 1900;
+	constexpr uint32_t SCREEN_HEIGHT = 1000;
 
 	struct Tile
 	{
@@ -79,7 +82,7 @@ namespace SvgRenderer {
 	class Globals
 	{
 	public:
-		inline static glm::mat4 GlobalTransform = glm::mat4(1.0f); //glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0)) * glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
+		inline static glm::mat4 GlobalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0)) * glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
 		inline static PathsContainer AllPaths;
 		inline static TilesContainer Tiles;
 	};

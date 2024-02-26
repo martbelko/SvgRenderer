@@ -18,20 +18,23 @@ namespace SvgRenderer {
 		}
 	}
 
-	void TileBuilder::Tile(int32_t x, int32_t y, const std::array<uint8_t, TILE_SIZE * TILE_SIZE>& data)
+	void TileBuilder::Tile(int32_t x, int32_t y, const std::array<uint8_t, TILE_SIZE * TILE_SIZE>& data, uint32_t tileOffset)
 	{
 		size_t base = vertices.size();
 
-		uint32_t u1 = nextCol * TILE_SIZE;
-		uint32_t u2 = (nextCol + 1) * TILE_SIZE;
-		uint32_t v1 = nextRow * TILE_SIZE;
-		uint32_t v2 = (nextRow + 1) * TILE_SIZE;
+		tileOffset += 1;
+		uint32_t col = tileOffset % (ATLAS_SIZE / TILE_SIZE);
+		uint32_t row = tileOffset / (ATLAS_SIZE / TILE_SIZE);
+		uint32_t u1 = col * TILE_SIZE;
+		uint32_t u2 = (col + 1) * TILE_SIZE;
+		uint32_t v1 = row * TILE_SIZE;
+		uint32_t v2 = (row + 1) * TILE_SIZE;
 
 		vertices.push_back(Vertex{
 			.pos = { x, y },
 			.uv = { u1, v1 },
 			.color = color,
-		});
+			});
 		vertices.push_back(Vertex{
 			.pos = { static_cast<int32_t>(glm::floor(x + TILE_SIZE)), y },
 			.uv = { u2, v1 },
@@ -55,23 +58,16 @@ namespace SvgRenderer {
 		indices.push_back(base + 2);
 		indices.push_back(base + 3);
 
-		for (uint32_t row = 0; row < TILE_SIZE; ++row)
+		for (uint32_t y = 0; y < TILE_SIZE; ++y)
 		{
-			for (uint32_t col = 0; col < TILE_SIZE; ++col)
+			for (uint32_t x = 0; x < TILE_SIZE; ++x)
 			{
-				size_t index = nextRow * TILE_SIZE * ATLAS_SIZE
-					+ row * ATLAS_SIZE
-					+ nextCol * TILE_SIZE
-					+ col;
-				atlas[index] = data[row * TILE_SIZE + col];
+				size_t index = row * TILE_SIZE * ATLAS_SIZE
+					+ y * ATLAS_SIZE
+					+ col * TILE_SIZE
+					+ x;
+				atlas[index] = data[y * TILE_SIZE + x];
 			}
-		}
-
-		nextCol += 1;
-		if (nextCol == ATLAS_SIZE / TILE_SIZE)
-		{
-			nextCol = 0;
-			nextRow += 1;
 		}
 	}
 

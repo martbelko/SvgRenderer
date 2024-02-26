@@ -18,6 +18,7 @@ namespace SvgRenderer {
 	Rasterizer::Rasterizer(const BoundingBox& bbox, uint32_t pi)
 	{
 		pathIndex = pi;
+
 		const int32_t minBboxCoordX = glm::floor(bbox.min.x);
 		const int32_t minBboxCoordY = glm::floor(bbox.min.y);
 		const int32_t maxBboxCoordX = glm::ceil(bbox.max.x);
@@ -32,21 +33,6 @@ namespace SvgRenderer {
 		m_TileStartY = minTileCoordY;
 		m_TileCountX = maxTileCoordX - minTileCoordX + 1;
 		m_TileCountY = maxTileCoordY - minTileCoordY + 1;
-		//
-		//const uint32_t tileCount = m_TileCountX * m_TileCountY;
-		//tiles.reserve(tileCount);
-		//
-		//for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
-		//{
-		//	for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
-		//	{
-		//		tiles.push_back(Tile{
-		//			.winding = 0,
-		//			.hasIncrements = false,
-		//			.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
-		//		});
-		//	}
-		//}
 	}
 
 	void Rasterizer::MoveTo(const glm::vec2& point)
@@ -257,20 +243,6 @@ namespace SvgRenderer {
 				{
 					int32_t width = nextTileX - tileX - 1;
 					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE);
-
-					//std::array<uint8_t, TILE_SIZE* TILE_SIZE> tileData;
-					//for (uint32_t y = 0; y < TILE_SIZE; y++)
-					//{
-					//	for (uint32_t x = 0; x < TILE_SIZE; x++)
-					//	{
-					//		tileData[y * TILE_SIZE + x] = 255.0f;
-					//	}
-					//}
-					//
-					//for (int32_t i = tileX + 1; i < nextTileX; i++)
-					//{
-					//	builder.Tile(i * TILE_SIZE, tileY * TILE_SIZE, tileData);
-					//}
 				}
 			}
 		}
@@ -322,7 +294,11 @@ namespace SvgRenderer {
 
 			int32_t tileX = GetTileXFromAbsoluteIndex(i);
 			int32_t tileY = GetTileYFromAbsoluteIndex(i);
-			builder.Tile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData);
+
+			if (tileX >= 0 && tileY >= 0 && tileX <= (SCREEN_WIDTH / TILE_SIZE) && tileY <= (SCREEN_HEIGHT / TILE_SIZE))
+			{
+				builder.Tile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData, i + path.startVisibleTileIndex);
+			}
 
 			std::fill(areas.begin(), areas.end(), 0.0f);
 			std::fill(heights.begin(), heights.end(), 0.0f);

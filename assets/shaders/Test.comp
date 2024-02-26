@@ -33,7 +33,7 @@ struct Command
 	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
 };
 
-layout(location = 0) uniform mat3 u_GlobalTransform;
+layout(location = 0) uniform mat4 u_GlobalTransform;
 
 layout(std430, binding = 0) buffer Paths
 {
@@ -48,7 +48,7 @@ layout(std430, binding = 1) buffer Commands
 void main()
 {
 	uint index = gl_GlobalInvocationID.y * gl_NumWorkGroups.x + gl_GlobalInvocationID.x;
-	if (index > 2451)
+	if (index >= commands.length())
 	{
 		return;
 	}
@@ -69,9 +69,11 @@ void main()
 	vec2 p2 = commands[index].points[1];
 	vec2 p3 = commands[index].points[2];
 
-	vec2 v1 = (paths[pathIndex].transform * vec4(p1, 1.0, 1.0)).xy;
-	vec2 v2 = (paths[pathIndex].transform * vec4(p2, 1.0, 1.0)).xy;
-	vec2 v3 = (paths[pathIndex].transform * vec4(p3, 1.0, 1.0)).xy;
+	mat4 trans = u_GlobalTransform * paths[pathIndex].transform;
+
+	vec2 v1 = (trans * vec4(p1, 1.0, 1.0)).xy;
+	vec2 v2 = (trans * vec4(p2, 1.0, 1.0)).xy;
+	vec2 v3 = (trans * vec4(p3, 1.0, 1.0)).xy;
 
 	//commands[index].points[0][0] = 100;
 	//commands[index].points[1][0] = 100;

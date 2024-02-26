@@ -35,12 +35,7 @@
 #include <execution>
 #include <future>
 
-#include <omp.h>
-
 namespace SvgRenderer {
-
-	constexpr uint32_t SCREEN_WIDTH = 1900;
-	constexpr uint32_t SCREEN_HEIGHT = 1000;
 
 	uint32_t g_PathIndex = 0;
 
@@ -561,8 +556,11 @@ namespace SvgRenderer {
 
 		Renderer::Init(initWidth, initHeight);
 
+		int maxTextureSize;
+		glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -594,8 +592,12 @@ namespace SvgRenderer {
 		Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
 		assert(glGetError() == GL_NO_ERROR);
 
+		shader->Bind();
+		shader->SetUniformMat4(0, Globals::GlobalTransform);
+
 		uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.commands.size() / 65535.0f), 1.0f);
 		shader->Dispatch(65535, ySize, 1);
+		GLenum xx = glGetError();
 		assert(glGetError() == GL_NO_ERROR);
 
 		glFinish();
@@ -832,6 +834,7 @@ namespace SvgRenderer {
 
 		{
 			std::atomic_uint32_t tileCount = 0;
+			std::atomic_uint32_t visibleTileCount = 0;
 			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -839,6 +842,8 @@ namespace SvgRenderer {
 				{
 					continue;
 				}
+
+				// TODO: We are not interested in tiles, where x-coord of the tile is above SCREEN_WIDTH, or y-coord is above SCREEN_HEIGHT
 
 				const int32_t minBboxCoordX = glm::floor(path.bbox.min.x);
 				const int32_t minBboxCoordY = glm::floor(path.bbox.min.y);
@@ -850,13 +855,22 @@ namespace SvgRenderer {
 				const int32_t maxTileCoordX = glm::ceil(static_cast<float>(maxBboxCoordX) / TILE_SIZE);
 				const int32_t maxTileCoordY = glm::ceil(static_cast<float>(maxBboxCoordY) / TILE_SIZE);
 
-				uint32_t m_TileStartX = minTileCoordX;
-				uint32_t m_TileStartY = minTileCoordY;
+				int32_t m_TileStartX = minTileCoordX;
+				int32_t m_TileStartY = minTileCoordY;
 				uint32_t m_TileCountX = maxTileCoordX - minTileCoordX + 1;
 				uint32_t m_TileCountY = maxTileCoordY - minTileCoordY + 1;
 
+				int32_t visibleTileStartX = glm::max(0, minTileCoordX);
+				int32_t visibleTileStartY = glm::max(0, minTileCoordY);
+				int32_t maxVisibleTileCoordX = glm::min(maxTileCoordX, static_cast<int32_t>(glm::ceil(static_cast<float>(SCREEN_WIDTH) / TILE_SIZE)));
+				int32_t maxVisibleTileCoordY = glm::min(maxTileCoordY, static_cast<int32_t>(glm::ceil(static_cast<float>(SCREEN_HEIGHT) / TILE_SIZE)));
+				uint32_t visibleTileCountX = maxVisibleTileCoordX - visibleTileStartX + 1;
+				uint32_t visibleTileCountY = maxVisibleTileCoordY - visibleTileStartY + 1;
+
 				const uint32_t count = m_TileCountX * m_TileCountY;
+				const uint32_t visibleCount = visibleTileCountX * visibleTileCountY;
 				path.startTileIndex = count;
+				path.startVisibleTileIndex = visibleCount;
 
 				for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
 				{
@@ -871,10 +885,12 @@ namespace SvgRenderer {
 				}
 
 				tileCount += count;
+				visibleTileCount += visibleCount;
 			}
 		}
 
 		uint32_t tileCount = 0;
+		uint32_t visibleTileCount = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -882,11 +898,16 @@ namespace SvgRenderer {
 			path.startTileIndex = tileCount;
 			tileCount += count;
 			path.endTileIndex = tileCount - 1;
+
+			uint32_t visibleCount = path.startVisibleTileIndex;
+			path.startVisibleTileIndex = visibleTileCount;
+			visibleTileCount += visibleCount;
+			path.endVisibleTileIndex = visibleTileCount - 1;
 		}
 
 		SR_TRACE("{0}", tileCount);
+		SR_TRACE("{0}", visibleTileCount);
 
-		uint32_t cc = 0;
 		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
@@ -903,17 +924,11 @@ namespace SvgRenderer {
 			rast.Coarse(m_TileBuilder);
 			rast.Finish(m_TileBuilder);
 
-			//cc += rast.tiles.size();
-
 			if (++total % 10000 == 0)
 			{
 				SR_TRACE("Processed {0} paths", total);
 			}
 		}
-
-		// 2 576 084
-		std::cout << cc << '\n';
-		std::cout << sizeof(Tile) * cc << '\n';
 #else
 		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
