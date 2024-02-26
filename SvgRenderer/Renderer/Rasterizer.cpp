@@ -3,6 +3,8 @@
 #include "Renderer/Flattening.h"
 
 #include <cassert>
+#include <numeric>
+#include <execution>
 
 namespace SvgRenderer {
 
@@ -35,19 +37,16 @@ namespace SvgRenderer {
 		m_TileCountY = maxTileCoordY - minTileCoordY + 1;
 	}
 
-	void Rasterizer::MoveTo(const glm::vec2& point)
+	void Rasterizer::MoveTo(const glm::vec2& last, const glm::vec2& point)
 	{
-		assert(last == first);
-
-		first = point;
-		last = point;
-		prevTileY = GetTileCoordY(glm::floor(point.y));
 	}
 
-	void Rasterizer::LineTo(const glm::vec2& point)
+	void Rasterizer::LineTo(const glm::vec2& last, const glm::vec2& point)
 	{
 		if (point != last)
 		{
+			uint32_t prevTileY = GetTileCoordY(glm::floor(last.y));
+
 			int32_t xDir = sign(point.x - last.x);
 			int32_t yDir = sign(point.y - last.y);
 			float dtdx = 1.0f / (point.x - last.x);
@@ -103,9 +102,12 @@ namespace SvgRenderer {
 					relativeY = TILE_SIZE - relativeY - 1;
 				}
 
-				GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].area += area;
-				GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].height += height;
-				GetTileFromWindowPos(x, y).hasIncrements = true;
+				{
+					std::lock_guard lock(mut1);
+					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].area += area;
+					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].height += height;
+					GetTileFromWindowPos(x, y).hasIncrements = true;
+				}
 
 				// Advance to the next scanline
 				if (rowt1 < colt1)
@@ -139,9 +141,13 @@ namespace SvgRenderer {
 					const PathRender& path = Globals::AllPaths.paths[pathIndex];
 					uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
 					uint32_t currentIndex = glm::max(glm::min(GetTileIndexFromRelativePos(v1, currentTileY), static_cast<uint32_t>(tileCount - 1)), 0u);
-					for (uint32_t i = 0; i < currentIndex; i++)
+
 					{
-						Globals::Tiles.tiles[i + path.startTileIndex].winding += v2;
+						std::lock_guard lock(mut2);
+						for (uint32_t i = 0; i < currentIndex; i++)
+						{
+							Globals::Tiles.tiles[i + path.startTileIndex].winding += v2;
+						}
 					}
 
 					prevTileY = tileY;
@@ -154,57 +160,82 @@ namespace SvgRenderer {
 				}
 			}
 		}
-
-		last = point;
+		else
+		{
+			// SR_ERROR("Else block");
+		}
 	}
 
 	void Rasterizer::CommandFromArray(const PathRenderCmd& cmd, const glm::vec2& lastPoint)
 	{
-		for (uint32_t i = cmd.startIndexSimpleCommands; i <= cmd.endIndexSimpleCommands; i++)
+		std::vector<uint32_t> indices;
+		indices.resize(cmd.endIndexSimpleCommands - cmd.startIndexSimpleCommands + 1);
+		std::iota(indices.begin(), indices.end(), cmd.startIndexSimpleCommands);
+
+		auto GetSimpleCmdPrevPoint = [lastPoint, &cmd](uint32_t simpleCmdIndex) -> glm::vec2
+		{
+			return simpleCmdIndex == cmd.startIndexSimpleCommands ? lastPoint : Globals::AllPaths.simpleCommands[simpleCmdIndex - 1].point;
+		};
+
+		std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this, GetSimpleCmdPrevPoint](uint32_t i)
 		{
 			const SimpleCommand& simpleCmd = Globals::AllPaths.simpleCommands[i];
+			glm::vec2 last = GetSimpleCmdPrevPoint(i);
+
 			switch (simpleCmd.type)
 			{
 			case MOVE_TO:
-				this->MoveTo(simpleCmd.point);
+				this->MoveTo(last, simpleCmd.point);
 				break;
 			case LINE_TO:
-				this->LineTo(simpleCmd.point);
+				this->LineTo(last, simpleCmd.point);
 				break;
 			default:
 				assert(false && "Only moves and lines");
 				break;
 			}
+		});
+	}
+
+	static glm::vec2 GetPreviousPoint(uint32_t pathIndex, uint32_t cmdIndex)
+	{
+		const PathRender& path = Globals::AllPaths.paths[pathIndex];
+		if (cmdIndex == path.startCmdIndex)
+		{
+			return glm::vec2(0, 0);
 		}
+
+		const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex - 1];
+		uint32_t pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+		switch (pathType)
+		{
+		case MOVE_TO:
+		case LINE_TO:
+			return cmd.transformedPoints[0];
+		case QUAD_TO:
+			return cmd.transformedPoints[1];
+		case CUBIC_TO:
+			return cmd.transformedPoints[2];
+		}
+
+		SR_ASSERT(false, "Invalid path type");
+		return glm::vec2(0, 0);
 	}
 
 	void Rasterizer::FillFromArray(uint32_t pathIndex)
 	{
 		const PathRender& path = Globals::AllPaths.paths[pathIndex];
 
-		glm::vec2 last = glm::vec2(0, 0);
-		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
-		{
-			const PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
-			CommandFromArray(rndCmd, last);
+		std::vector<uint32_t> indices;
+		indices.resize(path.endCmdIndex - path.startCmdIndex + 1);
+		std::iota(indices.begin(), indices.end(), 0);
 
-			uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
-			switch (pathType)
-			{
-			case MOVE_TO:
-				last = rndCmd.transformedPoints[0];
-				break;
-			case LINE_TO:
-				last = rndCmd.transformedPoints[0];
-				break;
-			case QUAD_TO:
-				last = rndCmd.transformedPoints[1];
-				break;
-			case CUBIC_TO:
-				last = rndCmd.transformedPoints[2];
-				break;
-			}
-		}
+		std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this, pathIndex, &path](uint32_t cmdIndex)
+		{
+			const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex + path.startCmdIndex];
+			glm::vec2 last = GetPreviousPoint(pathIndex, cmdIndex + path.startCmdIndex);
+			CommandFromArray(cmd, last);
+		});
 	}
 
 	std::pair<uint32_t, uint32_t> Rasterizer::CalculateNumberOfQuads()
@@ -273,8 +304,6 @@ namespace SvgRenderer {
 
 	void Rasterizer::Coarse(TileBuilder& builder)
 	{
-		assert(last == first);
-
 		const PathRender& path = Globals::AllPaths.paths[pathIndex];
 		uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
 		uint32_t quadIndex = path.startSpanQuadIndex;

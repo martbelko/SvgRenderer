@@ -558,7 +558,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -566,6 +566,8 @@ namespace SvgRenderer {
 		delete root;
 
 		// Everything after this line may be done in each frame
+
+		Timer globalTimer;
 
 #define ASYNC 1
 		// 1.step: Transform the paths
@@ -885,6 +887,26 @@ namespace SvgRenderer {
 		SR_TRACE("{0}", tileCount);
 		SR_TRACE("{0}", visibleTileCount);
 
+		std::vector<uint32_t> indices;
+		indices.resize(Globals::AllPaths.paths.size());
+		std::iota(indices.begin(), indices.end(), 0);
+
+		{
+			Timer timer;
+			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
+			{
+				PathRender& path = Globals::AllPaths.paths[pathIndex];
+				if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
+				{
+					return;
+				}
+
+				Rasterizer rast(path.bbox, pathIndex);
+				rast.FillFromArray(pathIndex);
+			});
+			SR_INFO("Time for filling: {0}", timer.ElapsedMillis());
+		}
+
 		// 4.2 Calculate corrent count and indices for vertices of each path
 		uint32_t accumCount = 0;
 		uint32_t accumTileCount = 0;
@@ -897,7 +919,6 @@ namespace SvgRenderer {
 			}
 
 			Rasterizer rast(path.bbox, pathIndex);
-			rast.FillFromArray(pathIndex);
 
 			auto [coarseQuadCount, fineQuadCount] = rast.CalculateNumberOfQuads();
 			path.startSpanQuadIndex = accumCount;
@@ -924,9 +945,6 @@ namespace SvgRenderer {
 		}
 
 		// 4.3 The rest
-		std::vector<uint32_t> indices;
-		indices.resize(Globals::AllPaths.paths.size());
-		std::iota(indices.begin(), indices.end(), 0);
 
 		Timer timer;
 		std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
@@ -964,6 +982,8 @@ namespace SvgRenderer {
 			}
 		}
 #endif
+
+		SR_INFO("Total time: {0} ms", globalTimer.ElapsedMillis());
 	}
 
 	void Application::Shutdown()

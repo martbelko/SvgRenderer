@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 
 #include <array>
+#include <mutex>
 
 namespace SvgRenderer {
 
@@ -50,12 +51,11 @@ namespace SvgRenderer {
 
 		uint32_t pathIndex;
 
-		glm::vec2 first = { 0.0f, 0.0f };
-		glm::vec2 last = { 0.0f, 0.0f };
-		int16_t prevTileY = 0;
+		std::mutex mut1;
+		std::mutex mut2;
 
-		void MoveTo(const glm::vec2& point);
-		void LineTo(const glm::vec2& p1);
+		void MoveTo(const glm::vec2& last, const glm::vec2& point);
+		void LineTo(const glm::vec2& last, const glm::vec2& p1);
 
 		void CommandFromArray(const PathRenderCmd& command, const glm::vec2& lastPoint);
 		void FillFromArray(uint32_t pathIndex);
