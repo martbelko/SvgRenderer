@@ -424,42 +424,35 @@ namespace SvgRenderer {
 		return Globals::GlobalTransform * (transform * glm::vec4(point, 1.0f, 1.0f));
 	}
 
-	static glm::vec2 ApplyTransform(const glm::mat3& transform, const glm::vec2& point)
-	{
-		return Globals::GlobalTransform * glm::vec4(transform * glm::vec3(point, 1.0f), 1.0f);
-	}
-
 	static void TransformCurve(PathRenderCmd* cmd)
 	{
 		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd->pathIndexCmdType);
 		cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
 		cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
 		cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
-
-		//uint32_t cmdType = GET_CMD_TYPE(cmd->pathIndexCmdType);
-		//switch (cmdType)
-		//{
-		//case MOVE_TO:
-		//case LINE_TO:
-		//{
-		//	cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-		//	break ;
-		//}
-		//case QUAD_TO:
-		//{
-		//	cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-		//	cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
-		//	break;
-		//}
-		//case CUBIC_TO:
-		//{
-		//	cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-		//	cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
-		//	cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
-		//	break;
-		//}
-		//}
 	};
+
+	static glm::vec2 GetPreviousPoint(const PathRender& path, uint32_t index)
+	{
+		if (index == path.startCmdIndex)
+		{
+			return glm::vec2(0, 0);
+		}
+
+		PathRenderCmd& rndCmd = Globals::AllPaths.commands[index - 1];
+		uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+		switch (pathType)
+		{
+		case MOVE_TO:
+		case LINE_TO:
+			return rndCmd.transformedPoints[0];
+		case QUAD_TO:
+			return rndCmd.transformedPoints[1];
+		case CUBIC_TO:
+			return rndCmd.transformedPoints[2];
+		}
+	};
+
 
 	void Application::Init()
 	{
@@ -562,27 +555,6 @@ namespace SvgRenderer {
 		}
 
 		// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
-		auto getPreviousPoint = [](const PathRender& path, uint32_t index) -> glm::vec2
-		{
-			if (index == path.startCmdIndex)
-			{
-					return glm::vec2(0, 0);
-			}
-
-			PathRenderCmd& rndCmd = Globals::AllPaths.commands[index - 1];
-			uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
-			switch (pathType)
-			{
-			case MOVE_TO:
-			case LINE_TO:
-				return rndCmd.transformedPoints[0];
-			case QUAD_TO:
-				return rndCmd.transformedPoints[1];
-			case CUBIC_TO:
-				return rndCmd.transformedPoints[2];
-			}
-		};
-
 		Timer timer2;
 		std::atomic_uint32_t simpleCommandsCount = 0;
 		{
@@ -594,12 +566,12 @@ namespace SvgRenderer {
 			std::array<uint32_t, wgSize> wgIndices;
 			std::iota(wgIndices.begin(), wgIndices.end(), 0);
 
-			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&simpleCommandsCount, &getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&simpleCommandsCount, &wgIndices, &wgSize](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
 				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
 				{
-					std::for_each(executionPolicy, wgIndices.cbegin(), wgIndices.cend(), [&simpleCommandsCount, &path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
+					std::for_each(executionPolicy, wgIndices.cbegin(), wgIndices.cend(), [&simpleCommandsCount, &path, &offsetCmdIndex](uint32_t wgIndex)
 					{
 						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
 						if (cmdIndex > path.endCmdIndex)
@@ -608,7 +580,7 @@ namespace SvgRenderer {
 						}
 
 						PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
-						glm::vec2 last = getPreviousPoint(path, cmdIndex);
+						glm::vec2 last = GetPreviousPoint(path, cmdIndex);
 						uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
 						uint32_t xx = simpleCommandsCount.fetch_add(count);
 						rndCmd.startIndexSimpleCommands = xx;
@@ -633,12 +605,12 @@ namespace SvgRenderer {
 			std::iota(wgIndices.begin(), wgIndices.end(), 0);
 
 			Timer timerFlatten;
-			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&wgIndices, &wgSize](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
 				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
 				{
-					std::for_each(executionPolicy, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
+					std::for_each(executionPolicy, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex](uint32_t wgIndex)
 					{
 						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
 						if (cmdIndex > path.endCmdIndex)
@@ -647,7 +619,7 @@ namespace SvgRenderer {
 						}
 
 						PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
-						glm::vec2 last = getPreviousPoint(path, cmdIndex);
+						glm::vec2 last = GetPreviousPoint(path, cmdIndex);
 						Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
 					});
 				}
