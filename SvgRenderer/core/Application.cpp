@@ -497,6 +497,9 @@ namespace SvgRenderer {
 		Render(root, m_TileBuilder);
 		delete root;
 
+		Globals::AllPaths.simpleCommands.resize(2'000'000);
+		Globals::Tiles.tiles.resize(1'000'000); // This remains fixed for the whole run of the program, may change in the future
+
 		// Everything after this line may be done in each frame
 
 #define ASYNC 1
@@ -538,7 +541,6 @@ namespace SvgRenderer {
 		//
 		//SR_INFO("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
 		//tsTimer.Reset();
-		//// glFinish();
 		//
 		//glGetNamedBufferSubData(buf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
 		//SR_INFO("Retrieving data GPU -> CPU: {0} ms", tsTimer.ElapsedMillis());
@@ -579,7 +581,6 @@ namespace SvgRenderer {
 			switch (pathType)
 			{
 			case MOVE_TO:
-				return rndCmd.transformedPoints[0];
 			case LINE_TO:
 				return rndCmd.transformedPoints[0];
 			case QUAD_TO:
@@ -588,6 +589,8 @@ namespace SvgRenderer {
 				return rndCmd.transformedPoints[2];
 			}
 		};
+
+		Timer timer2;
 
 		uint32_t simpleCommandsCount = 0;
 		{
@@ -634,7 +637,9 @@ namespace SvgRenderer {
 			}
 		}
 
-		Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
+		SR_INFO("Step 2: {0} ms", timer2.ElapsedMillis());
+
+		// Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
 #else
 		uint32_t simpleCommandsCount = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
@@ -683,6 +688,7 @@ namespace SvgRenderer {
 			std::array<uint32_t, wgSize> wgIndices;
 			std::iota(wgIndices.begin(), wgIndices.end(), 0);
 
+			Timer timerFlatten;
 			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -702,8 +708,10 @@ namespace SvgRenderer {
 					});
 				}
 			});
+			SR_INFO("Flattening: {0} ms", timerFlatten.ElapsedMillis());
 
 			// 3.1 Calculating BBOX
+			Timer timerBbox;
 			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -718,6 +726,7 @@ namespace SvgRenderer {
 
 				path.bbox.AddPadding({ 1.0f, 1.0f });
 			});
+			SR_INFO("Calculating BBOX: {0} ms", timerBbox.ElapsedMillis());
 		}
 #else
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
@@ -755,10 +764,9 @@ namespace SvgRenderer {
 #endif
 		// 4.step: The rest
 #if ASYNC == 1
-		// 4.1 Calculate correct tile indices for each path according to its bounding box
-		Globals::Tiles.tiles.reserve(561'367); // This remains fixed for the whole run of the program, may change in the future
-
 		{
+			// 4.1 Calculate correct tile indices for each path according to its bounding box
+			Timer timer41;
 			std::atomic_uint32_t tileCount = 0;
 			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 			{
@@ -787,22 +795,25 @@ namespace SvgRenderer {
 				const uint32_t count = m_TileCountX * m_TileCountY;
 				path.startTileIndex = count;
 
-				for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
-				{
-					for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
-					{
-						Globals::Tiles.tiles.push_back(Tile{
-							.winding = 0,
-							.hasIncrements = false,
-							.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
-							});
-					}
-				}
+				//for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
+				//{
+				//	for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
+				//	{
+				//		Globals::Tiles.tiles.push_back(Tile{
+				//			.winding = 0,
+				//			.hasIncrements = false,
+				//			.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
+				//			});
+				//	}
+				//}
 
 				tileCount += count;
 			}
+			SR_INFO("Step 4.1: {0} ms", timer41.ElapsedMillis());
 		}
 
+		// 4.2: ...TODO: Add description
+		Timer timer42;
 		uint32_t tileCount = 0;
 		uint32_t visibleTileCount = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
@@ -818,12 +829,15 @@ namespace SvgRenderer {
 			visibleTileCount += visibleCount;
 		}
 
+		SR_INFO("Step 4.2: {0} ms", timer42.ElapsedMillis());
+
+		// 4.3: ...TODO: Add desc
 		std::vector<uint32_t> indices;
 		indices.resize(Globals::AllPaths.paths.size());
 		std::iota(indices.begin(), indices.end(), 0);
 
 		{
-			Timer timer;
+			Timer timer43;
 			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -835,10 +849,11 @@ namespace SvgRenderer {
 				Rasterizer rast(path.bbox, pathIndex);
 				rast.FillFromArray(pathIndex);
 			});
-			SR_INFO("Time for filling: {0}", timer.ElapsedMillis());
+			SR_INFO("Filling: {0}", timer43.ElapsedMillis());
 		}
 
-		// 4.2 Calculate corrent count and indices for vertices of each path
+		// 4.4 Calculate corrent count and indices for vertices of each path
+		Timer timer44;
 		uint32_t accumCount = 0;
 		uint32_t accumTileCount = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
@@ -859,10 +874,14 @@ namespace SvgRenderer {
 			path.startVisibleTileIndex = accumTileCount;
 			accumTileCount += fineQuadCount;
 		}
+		SR_INFO("Step 4.4: {0}", timer44.ElapsedMillis());
 
 		m_TileBuilder.vertices.resize(accumCount * 4);
 		const size_t numberOfIndices = accumCount * 6;
 		m_TileBuilder.indices.reserve(numberOfIndices);
+
+		// 4.5: ... TODO: Add desc
+		Timer timer45;
 		uint32_t base = 0;
 		for (size_t i = 0; i < numberOfIndices; i += 6)
 		{
@@ -874,10 +893,10 @@ namespace SvgRenderer {
 			m_TileBuilder.indices.push_back(base + 3);
 			base += 4;
 		}
+		SR_INFO("Step 4.5: {0}", timer45.ElapsedMillis());
 
-		// 4.3 The rest
-
-		Timer timer;
+		// 4.6 The rest
+		Timer timerRest;
 		std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -890,7 +909,7 @@ namespace SvgRenderer {
 			rast.Coarse(m_TileBuilder);
 			rast.Finish(m_TileBuilder);
 		});
-		SR_INFO("Time in ms: {0}", timer.ElapsedMillis());
+		SR_INFO("Coarse and Fine: {0}", timerRest.ElapsedMillis());
 #else
 		uint32_t total = 0;
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
@@ -913,8 +932,7 @@ namespace SvgRenderer {
 			}
 		}
 #endif
-
-		SR_INFO("Total time: {0} ms", globalTimer.ElapsedMillis());
+		SR_INFO("Total execution time: {0} ms", globalTimer.ElapsedMillis());
 	}
 
 	void Application::Shutdown()
@@ -1020,8 +1038,6 @@ namespace SvgRenderer {
 				GL_UNSIGNED_INT,
 				nullptr
 			);
-
-			//glFinish();
 
 			m_Window->OnUpdate();
 		}
