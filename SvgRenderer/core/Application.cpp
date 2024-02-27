@@ -429,105 +429,37 @@ namespace SvgRenderer {
 		return Globals::GlobalTransform * glm::vec4(transform * glm::vec3(point, 1.0f), 1.0f);
 	}
 
-	static void TransformPath(uint32_t pathIndex)
-	{
-		const PathRender& path = Globals::AllPaths.paths[pathIndex];
-		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
-		{
-			PathRenderCmd& cmd = Globals::AllPaths.commands[i];
-			uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
-			uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
-			switch (cmdType)
-			{
-			case MOVE_TO:
-			case LINE_TO:
-				cmd.transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[0]);
-				break;
-			case QUAD_TO:
-				cmd.transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[0]);
-				cmd.transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[1]);
-				break;
-			case CUBIC_TO:
-				cmd.transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[0]);
-				cmd.transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[1]);
-				cmd.transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[2]);
-				break;
-			}
-		}
-	}
-
 	static void TransformCurve(PathRenderCmd* cmd)
 	{
 		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd->pathIndexCmdType);
-		uint32_t cmdType = GET_CMD_TYPE(cmd->pathIndexCmdType);
+		cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+		cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
+		cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
 
-		static int cc = -1;
-		if (++cc == 5)
-		{
-			int xx = 6;
-		}
-
-		switch (cmdType)
-		{
-		case MOVE_TO:
-		case LINE_TO:
-		{
-			// TODO: Just for debugging
-			glm::vec2 xx = cmd->transformedPoints[0];
-
-			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-
-			assert(glm::abs(xx.x - cmd->transformedPoints[0].x) < 0.01f);
-			assert(glm::abs(xx.y - cmd->transformedPoints[0].y) < 0.01f);
-			break ;
-		}
-		case QUAD_TO:
-		{
-			glm::vec2 xx0 = cmd->transformedPoints[0];
-			glm::vec2 xx1 = cmd->transformedPoints[1];
-
-			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-			cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
-
-			assert(glm::abs(xx0.x - cmd->transformedPoints[0].x) < 0.01f);
-			assert(glm::abs(xx1.x - cmd->transformedPoints[1].x) < 0.01f);
-			assert(glm::abs(xx0.y - cmd->transformedPoints[0].y) < 0.01f);
-			assert(glm::abs(xx1.y - cmd->transformedPoints[1].y) < 0.01f);
-
-			break;
-		}
-		case CUBIC_TO:
-		{
-			glm::vec2 xx0 = cmd->transformedPoints[0];
-			glm::vec2 xx1 = cmd->transformedPoints[1];
-			glm::vec2 xx2 = cmd->transformedPoints[2];
-
-			cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-			cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
-			cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
-
-			assert(glm::abs(xx0.x - cmd->transformedPoints[0].x) < 0.01f);
-			assert(glm::abs(xx1.x - cmd->transformedPoints[1].x) < 0.01f);
-			assert(glm::abs(xx2.x - cmd->transformedPoints[2].x) < 0.01f);
-			assert(glm::abs(xx0.y - cmd->transformedPoints[0].y) < 0.01f);
-			assert(glm::abs(xx1.y - cmd->transformedPoints[1].y) < 0.01f);
-			assert(glm::abs(xx2.y - cmd->transformedPoints[2].y) < 0.01f);
-
-			break;
-		}
-		}
+		//uint32_t cmdType = GET_CMD_TYPE(cmd->pathIndexCmdType);
+		//switch (cmdType)
+		//{
+		//case MOVE_TO:
+		//case LINE_TO:
+		//{
+		//	cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+		//	break ;
+		//}
+		//case QUAD_TO:
+		//{
+		//	cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+		//	cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
+		//	break;
+		//}
+		//case CUBIC_TO:
+		//{
+		//	cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
+		//	cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
+		//	cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
+		//	break;
+		//}
+		//}
 	};
-
-	static void TransformPathAsync(uint32_t pathIndex)
-	{
-		PathRender& path = Globals::AllPaths.paths[pathIndex];
-
-		#pragma omp parallel for
-		for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
-		{
-			TransformCurve(&Globals::AllPaths.commands[i]);
-		}
-	}
 
 	void Application::Init()
 	{
@@ -567,52 +499,65 @@ namespace SvgRenderer {
 
 		// Everything after this line may be done in each frame
 
-		Timer globalTimer;
-
 #define ASYNC 1
 		// 1.step: Transform the paths
 #if ASYNC == 1
-		GLuint buf, buf1;
-		glCreateBuffers(1, &buf);
-		glCreateBuffers(1, &buf1);
+		//GLuint buf, buf1;
+		//glCreateBuffers(1, &buf);
+		//glCreateBuffers(1, &buf1);
+		//
+		//GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
+		//glNamedBufferStorage(buf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
+		//glNamedBufferStorage(buf1, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
+		//
+		//// glNamedBufferData(buf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), GL_STREAM_DRAW);
+		//assert(glGetError() == GL_NO_ERROR);
+		//
+		//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, buf1);
+		//assert(glGetError() == GL_NO_ERROR);
+		//
+		//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, buf);
+		//assert(glGetError() == GL_NO_ERROR);
+		//
+		//Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
+		//assert(glGetError() == GL_NO_ERROR);
+		//
+		//Timer globalTimer;
+		//
+		//Timer tsTimer;
+		//
+		//shader->Bind();
+		//shader->SetUniformMat4(0, Globals::GlobalTransform);
+		//
+		//uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.commands.size() / 65535.0f), 1.0f);
+		//shader->Dispatch(65535, ySize, 1);
+		//GLenum xx = glGetError();
+		//assert(glGetError() == GL_NO_ERROR);
+		//
+		//glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		//
+		//SR_INFO("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
+		//tsTimer.Reset();
+		//// glFinish();
+		//
+		//glGetNamedBufferSubData(buf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
+		//SR_INFO("Retrieving data GPU -> CPU: {0} ms", tsTimer.ElapsedMillis());
+		//
+		//glDeleteBuffers(1, &buf);
+		//glDeleteBuffers(1, &buf1);
 
-		GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
-		glNamedBufferStorage(buf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
-		glNamedBufferStorage(buf1, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
-
-		// glNamedBufferData(buf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), GL_STREAM_DRAW);
-		assert(glGetError() == GL_NO_ERROR);
-
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, buf1);
-		assert(glGetError() == GL_NO_ERROR);
-
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, buf);
-		assert(glGetError() == GL_NO_ERROR);
-
-		Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
-		assert(glGetError() == GL_NO_ERROR);
-
-		shader->Bind();
-		shader->SetUniformMat4(0, Globals::GlobalTransform);
-
-		uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.commands.size() / 65535.0f), 1.0f);
-		shader->Dispatch(65535, ySize, 1);
-		GLenum xx = glGetError();
-		assert(glGetError() == GL_NO_ERROR);
-
-		glFinish();
-
-		glGetNamedBufferSubData(buf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
-
+		Timer globalTimer;
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.commands.size());
 			std::iota(indices.begin(), indices.end(), 0);
 
-			std::for_each(std::execution::seq, indices.begin(), indices.end(), [](uint32_t cmdIndex)
+			Timer tsTimer;
+			std::for_each(std::execution::par, indices.begin(), indices.end(), [](uint32_t cmdIndex)
 			{
 				TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
 			});
+			SR_INFO("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
 		}
 #else
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
@@ -815,7 +760,6 @@ namespace SvgRenderer {
 
 		{
 			std::atomic_uint32_t tileCount = 0;
-			std::atomic_uint32_t visibleTileCount = 0;
 			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -840,17 +784,8 @@ namespace SvgRenderer {
 				uint32_t m_TileCountX = maxTileCoordX - minTileCoordX + 1;
 				uint32_t m_TileCountY = maxTileCoordY - minTileCoordY + 1;
 
-				int32_t visibleTileStartX = glm::max(0, minTileCoordX);
-				int32_t visibleTileStartY = glm::max(0, minTileCoordY);
-				int32_t maxVisibleTileCoordX = glm::min(maxTileCoordX, static_cast<int32_t>(glm::ceil(static_cast<float>(SCREEN_WIDTH) / TILE_SIZE)));
-				int32_t maxVisibleTileCoordY = glm::min(maxTileCoordY, static_cast<int32_t>(glm::ceil(static_cast<float>(SCREEN_HEIGHT) / TILE_SIZE)));
-				uint32_t visibleTileCountX = maxVisibleTileCoordX - visibleTileStartX + 1;
-				uint32_t visibleTileCountY = maxVisibleTileCoordY - visibleTileStartY + 1;
-
 				const uint32_t count = m_TileCountX * m_TileCountY;
-				const uint32_t visibleCount = visibleTileCountX * visibleTileCountY;
 				path.startTileIndex = count;
-				path.startVisibleTileIndex = visibleCount;
 
 				for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
 				{
@@ -865,7 +800,6 @@ namespace SvgRenderer {
 				}
 
 				tileCount += count;
-				visibleTileCount += visibleCount;
 			}
 		}
 
@@ -883,9 +817,6 @@ namespace SvgRenderer {
 			path.startVisibleTileIndex = visibleTileCount;
 			visibleTileCount += visibleCount;
 		}
-
-		SR_TRACE("{0}", tileCount);
-		SR_TRACE("{0}", visibleTileCount);
 
 		std::vector<uint32_t> indices;
 		indices.resize(Globals::AllPaths.paths.size());
