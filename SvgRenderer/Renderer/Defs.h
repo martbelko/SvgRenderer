@@ -5,6 +5,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <execution>
+
 namespace SvgRenderer {
 
 	#define MOVE_TO 0
@@ -16,6 +18,14 @@ namespace SvgRenderer {
 	#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
 	#define MAKE_CMD_PATH_INDEX(value, index) ((index << 16) | (value & 0x0000FFFF))
 	#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0xFFFF00FF))
+
+#define ASYNC 1
+	static constexpr std::execution::parallel_policy executionPolicy =
+#if ASYNC == 1
+		std::execution::par;
+#else
+		std::execution::seq;
+#endif
 
 	struct SimpleCommand // Lines or moves only
 	{

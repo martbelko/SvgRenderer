@@ -502,9 +502,8 @@ namespace SvgRenderer {
 
 		// Everything after this line may be done in each frame
 
-#define ASYNC 1
 		// 1.step: Transform the paths
-#if ASYNC == 1
+
 		//GLuint buf, buf1;
 		//glCreateBuffers(1, &buf);
 		//glCreateBuffers(1, &buf1);
@@ -555,20 +554,14 @@ namespace SvgRenderer {
 			std::iota(indices.begin(), indices.end(), 0);
 
 			Timer tsTimer;
-			std::for_each(std::execution::par, indices.begin(), indices.end(), [](uint32_t cmdIndex)
+			std::for_each(executionPolicy, indices.begin(), indices.end(), [](uint32_t cmdIndex)
 			{
 				TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
 			});
 			SR_INFO("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
 		}
-#else
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); ++pathIndex)
-		{
-			TransformPath(pathIndex);
-		}
-#endif
+
 		// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
-#if ASYNC == 1
 		auto getPreviousPoint = [](const PathRender& path, uint32_t index) -> glm::vec2
 		{
 			if (index == path.startCmdIndex)
@@ -601,12 +594,12 @@ namespace SvgRenderer {
 			std::array<uint32_t, wgSize> wgIndices;
 			std::iota(wgIndices.begin(), wgIndices.end(), 0);
 
-			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [&simpleCommandsCount, &getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&simpleCommandsCount, &getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
 				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
 				{
-					std::for_each(std::execution::par, wgIndices.cbegin(), wgIndices.cend(), [&simpleCommandsCount, &path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
+					std::for_each(executionPolicy, wgIndices.cbegin(), wgIndices.cend(), [&simpleCommandsCount, &path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
 					{
 						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
 						if (cmdIndex > path.endCmdIndex)
@@ -627,44 +620,8 @@ namespace SvgRenderer {
 		SR_INFO("Step 2: {0} ms", timer2.ElapsedMillis());
 
 		// Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
-#else
-		uint32_t simpleCommandsCount = 0;
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
-		{
-			const PathRender& path = Globals::AllPaths.paths[pathIndex];
-			glm::vec2 last = glm::vec2(0, 0);
-			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
-			{
-				PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
-				uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
 
-				uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
-				switch (pathType)
-				{
-				case MOVE_TO:
-					last = rndCmd.transformedPoints[0];
-					break;
-				case LINE_TO:
-					last = rndCmd.transformedPoints[0];
-					break;
-				case QUAD_TO:
-					last = rndCmd.transformedPoints[1];
-					break;
-				case CUBIC_TO:
-					last = rndCmd.transformedPoints[2];
-					break;
-				}
-
-				rndCmd.startIndexSimpleCommands = simpleCommandsCount;
-				simpleCommandsCount += count;
-				rndCmd.endIndexSimpleCommands = simpleCommandsCount - 1;
-			}
-		}
-
-		Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
-#endif
 		// 3.step: Simplify the commands and store in the array
-#if ASYNC == 1
 		{
 			// 3.1 Flattening
 			std::vector<uint32_t> indices;
@@ -676,12 +633,12 @@ namespace SvgRenderer {
 			std::iota(wgIndices.begin(), wgIndices.end(), 0);
 
 			Timer timerFlatten;
-			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
 				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
 				{
-					std::for_each(std::execution::par, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
+					std::for_each(executionPolicy, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
 					{
 						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
 						if (cmdIndex > path.endCmdIndex)
@@ -699,7 +656,7 @@ namespace SvgRenderer {
 
 			// 3.1 Calculating BBOX
 			Timer timerBbox;
-			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
 				for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
@@ -715,42 +672,8 @@ namespace SvgRenderer {
 			});
 			SR_INFO("Calculating BBOX: {0} ms", timerBbox.ElapsedMillis());
 		}
-#else
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
-		{
-			PathRender& path = Globals::AllPaths.paths[pathIndex];
 
-			glm::vec2 last = glm::vec2(0, 0);
-			for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
-			{
-				PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
-				BoundingBox bbox = Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
-				path.bbox = BoundingBox::Merge(path.bbox, bbox);
-
-				uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
-				switch (pathType)
-				{
-				case MOVE_TO:
-					last = rndCmd.transformedPoints[0];
-					break;
-				case LINE_TO:
-					last = rndCmd.transformedPoints[0];
-					break;
-				case QUAD_TO:
-					last = rndCmd.transformedPoints[1];
-					break;
-				case CUBIC_TO:
-					last = rndCmd.transformedPoints[2];
-					break;
-				}
-			}
-
-			// Maybe add more padding?
-			path.bbox.AddPadding({ 1.0f, 1.0f });
-		}
-#endif
 		// 4.step: The rest
-#if ASYNC == 1
 		{
 			// 4.1 Calculate correct tile indices for each path according to its bounding box
 			std::vector<uint32_t> indices;
@@ -759,7 +682,7 @@ namespace SvgRenderer {
 
 			Timer timer41;
 			std::atomic_uint32_t tileCount = 0;
-			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [&tileCount](uint32_t pathIndex)
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&tileCount](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
 				if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
@@ -817,7 +740,7 @@ namespace SvgRenderer {
 
 		{
 			Timer timer43;
-			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
 				if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
@@ -876,7 +799,7 @@ namespace SvgRenderer {
 
 		// 4.6 The rest
 		Timer timerRest;
-		std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
+		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
 			if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
@@ -889,28 +812,7 @@ namespace SvgRenderer {
 			rast.Finish(m_TileBuilder);
 		});
 		SR_INFO("Coarse and Fine: {0}", timerRest.ElapsedMillis());
-#else
-		uint32_t total = 0;
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
-		{
-			const PathRender& path = Globals::AllPaths.paths[pathIndex];
-			if (!Flattening::IsInsideViewSpace(path.bbox.min) || !Flattening::IsInsideViewSpace(path.bbox.max))
-			{
-				continue;
-			}
 
-			Rasterizer rast(path.bbox);
-			rast.FillFromArray(pathIndex);
-
-			m_TileBuilder.color = path.color;
-			rast.Finish(m_TileBuilder);
-
-			if (++total % 10000 == 0)
-			{
-				SR_TRACE("Processed {0} paths", total);
-			}
-		}
-#endif
 		SR_INFO("Total execution time: {0} ms", globalTimer.ElapsedMillis());
 	}
 

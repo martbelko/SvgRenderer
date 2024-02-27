@@ -177,7 +177,7 @@ namespace SvgRenderer {
 			return simpleCmdIndex == cmd.startIndexSimpleCommands ? lastPoint : Globals::AllPaths.simpleCommands[simpleCmdIndex - 1].point;
 		};
 
-		std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this, GetSimpleCmdPrevPoint](uint32_t i)
+		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this, GetSimpleCmdPrevPoint](uint32_t i)
 		{
 			const SimpleCommand& simpleCmd = Globals::AllPaths.simpleCommands[i];
 			glm::vec2 last = GetSimpleCmdPrevPoint(i);
@@ -230,7 +230,7 @@ namespace SvgRenderer {
 		indices.resize(path.endCmdIndex - path.startCmdIndex + 1);
 		std::iota(indices.begin(), indices.end(), 0);
 
-		std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [this, pathIndex, &path](uint32_t cmdIndex)
+		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this, pathIndex, &path](uint32_t cmdIndex)
 		{
 			const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex + path.startCmdIndex];
 			glm::vec2 last = GetPreviousPoint(pathIndex, cmdIndex + path.startCmdIndex);
