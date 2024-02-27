@@ -453,7 +453,6 @@ namespace SvgRenderer {
 		}
 	};
 
-
 	void Application::Init()
 	{
 		uint32_t initWidth = SCREEN_WIDTH, initHeight = SCREEN_HEIGHT;
@@ -493,54 +492,51 @@ namespace SvgRenderer {
 		Globals::AllPaths.simpleCommands.resize(2'000'000);
 		Globals::Tiles.tiles.resize(1'000'000); // This remains fixed for the whole run of the program, may change in the future
 
+#if ASYNC == 2
+		GLuint cmdBuf, pathBuf, atomicBuf;
+		glCreateBuffers(1, &cmdBuf);
+		glCreateBuffers(1, &pathBuf);
+		glCreateBuffers(1, &atomicBuf);
+
+		GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
+		glNamedBufferStorage(cmdBuf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
+		glNamedBufferStorage(pathBuf, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
+
+		uint32_t atomCounter = 0;
+		glNamedBufferStorage(atomicBuf, sizeof(uint32_t), &atomCounter, bufferFlags);
+
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, pathBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, cmdBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, atomicBuf);
+
+		Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
+		Ref<Shader> shader2 = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test1.comp");
+
+		SR_INFO("Running in GPU mode\n");
+#elif ASYNC == 1
+		SR_INFO("Running in CPU parallel mode\n");
+#else
+		SR_INFO("Running in CPU single-thread mode\n");
+#endif
+
 		// Everything after this line may be done in each frame
+		Timer globalTimer;
 
 		// 1.step: Transform the paths
+#if ASYNC == 2
+		Timer tsTimer;
 
-		//GLuint buf, buf1;
-		//glCreateBuffers(1, &buf);
-		//glCreateBuffers(1, &buf1);
-		//
-		//GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
-		//glNamedBufferStorage(buf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
-		//glNamedBufferStorage(buf1, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
-		//
-		//// glNamedBufferData(buf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), GL_STREAM_DRAW);
-		//assert(glGetError() == GL_NO_ERROR);
-		//
-		//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, buf1);
-		//assert(glGetError() == GL_NO_ERROR);
-		//
-		//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, buf);
-		//assert(glGetError() == GL_NO_ERROR);
-		//
-		//Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
-		//assert(glGetError() == GL_NO_ERROR);
-		//
-		//Timer globalTimer;
-		//
-		//Timer tsTimer;
-		//
-		//shader->Bind();
-		//shader->SetUniformMat4(0, Globals::GlobalTransform);
-		//
-		//uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.commands.size() / 65535.0f), 1.0f);
-		//shader->Dispatch(65535, ySize, 1);
-		//GLenum xx = glGetError();
-		//assert(glGetError() == GL_NO_ERROR);
-		//
-		//glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-		//
-		//SR_INFO("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
-		//tsTimer.Reset();
-		//
-		//glGetNamedBufferSubData(buf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
-		//SR_INFO("Retrieving data GPU -> CPU: {0} ms", tsTimer.ElapsedMillis());
-		//
-		//glDeleteBuffers(1, &buf);
-		//glDeleteBuffers(1, &buf1);
+		shader->Bind();
+		shader->SetUniformMat4(0, Globals::GlobalTransform);
 
-		Timer globalTimer;
+		uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.commands.size() / 65535.0f), 1.0f);
+		shader->Dispatch(65535, ySize, 1);
+
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+		SR_TRACE("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
+		tsTimer.Reset();
+#else
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.commands.size());
@@ -548,25 +544,45 @@ namespace SvgRenderer {
 
 			Timer tsTimer;
 			std::for_each(executionPolicy, indices.begin(), indices.end(), [](uint32_t cmdIndex)
-			{
-				TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
-			});
-			SR_INFO("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
+				{
+					TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
+				});
+			SR_TRACE("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
 		}
+#endif
 
 		// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
 		Timer timer2;
+#if ASYNC == 2
+		shader2->Bind();
+		{
+			uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.paths.size() / 65535.0f), 1.0f);
+			shader2->Dispatch(65535, 1, 1);
+		}
+
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+		SR_TRACE("Step 2: {0} ms", timer2.ElapsedMillis());
+
+		Timer gpuToCpuTimer;
+
+		glGetNamedBufferSubData(cmdBuf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
+		glGetNamedBufferSubData(pathBuf, 0, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data());
+		glGetNamedBufferSubData(atomicBuf, 0, sizeof(uint32_t), &atomCounter);
+
+		glDeleteBuffers(1, &cmdBuf);
+		glDeleteBuffers(1, &pathBuf);
+		glDeleteBuffers(1, &atomicBuf);
+
+		SR_WARN("GPU -> CPU: {0} ms", gpuToCpuTimer.ElapsedMillis());
+#else
 		std::atomic_uint32_t simpleCommandsCount = 0;
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.paths.size());
 			std::iota(indices.begin(), indices.end(), 0);
 
-			constexpr uint32_t wgSize = 256;
-			std::array<uint32_t, wgSize> wgIndices;
-			std::iota(wgIndices.begin(), wgIndices.end(), 0);
-
-			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&simpleCommandsCount, &wgIndices, &wgSize](uint32_t pathIndex)
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&simpleCommandsCount](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
 
@@ -584,10 +600,11 @@ namespace SvgRenderer {
 					rndCmd.endIndexSimpleCommands = xx + count - 1;
 				});
 			});
+			SR_TRACE("Step 2: {0} ms", timer2.ElapsedMillis());
 		}
-		SR_INFO("Step 2: {0} ms", timer2.ElapsedMillis());
 
 		// Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
+#endif
 
 		// 3.step: Simplify the commands and store in the array
 		{
@@ -620,7 +637,7 @@ namespace SvgRenderer {
 					});
 				}
 			});
-			SR_INFO("Flattening: {0} ms", timerFlatten.ElapsedMillis());
+			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
 
 			// 3.1 Calculating BBOX
 			Timer timerBbox;
@@ -638,7 +655,7 @@ namespace SvgRenderer {
 
 				path.bbox.AddPadding({ 1.0f, 1.0f });
 			});
-			SR_INFO("Calculating BBOX: {0} ms", timerBbox.ElapsedMillis());
+			SR_TRACE("Calculating BBOX: {0} ms", timerBbox.ElapsedMillis());
 		}
 
 		// 4.step: The rest
@@ -679,7 +696,7 @@ namespace SvgRenderer {
 
 				tileCount += count;
 			});
-			SR_INFO("Step 4.1: {0} ms", timer41.ElapsedMillis());
+			SR_TRACE("Step 4.1: {0} ms", timer41.ElapsedMillis());
 		}
 
 		// 4.2: ...TODO: Add description
@@ -699,7 +716,7 @@ namespace SvgRenderer {
 			visibleTileCount += visibleCount;
 		}
 
-		SR_INFO("Step 4.2: {0} ms", timer42.ElapsedMillis());
+		SR_TRACE("Step 4.2: {0} ms", timer42.ElapsedMillis());
 
 		// 4.3: ...TODO: Add desc
 		std::vector<uint32_t> indices;
@@ -719,7 +736,7 @@ namespace SvgRenderer {
 				Rasterizer rast(path.bbox, pathIndex);
 				rast.FillFromArray(pathIndex);
 			});
-			SR_INFO("Filling: {0}", timer43.ElapsedMillis());
+			SR_TRACE("Filling: {0}", timer43.ElapsedMillis());
 		}
 
 		// 4.4 Calculate corrent count and indices for vertices of each path
@@ -744,7 +761,7 @@ namespace SvgRenderer {
 			path.startVisibleTileIndex = accumTileCount;
 			accumTileCount += fineQuadCount;
 		}
-		SR_INFO("Step 4.4: {0}", timer44.ElapsedMillis());
+		SR_TRACE("Step 4.4: {0}", timer44.ElapsedMillis());
 
 		m_TileBuilder.vertices.resize(accumCount * 4);
 		const size_t numberOfIndices = accumCount * 6;
@@ -763,7 +780,7 @@ namespace SvgRenderer {
 			m_TileBuilder.indices.push_back(base + 3);
 			base += 4;
 		}
-		SR_INFO("Step 4.5: {0}", timer45.ElapsedMillis());
+		SR_TRACE("Step 4.5: {0}", timer45.ElapsedMillis());
 
 		// 4.6 The rest
 		Timer timerRest;
@@ -779,7 +796,7 @@ namespace SvgRenderer {
 			rast.Coarse(m_TileBuilder);
 			rast.Finish(m_TileBuilder);
 		});
-		SR_INFO("Coarse and Fine: {0}", timerRest.ElapsedMillis());
+		SR_TRACE("Coarse and Fine: {0}", timerRest.ElapsedMillis());
 
 		SR_INFO("Total execution time: {0} ms", globalTimer.ElapsedMillis());
 	}

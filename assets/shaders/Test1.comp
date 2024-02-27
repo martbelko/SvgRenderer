@@ -1,0 +1,183 @@
+#version 460 core
+
+#define WG_SIZE 256
+
+layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+#define MOVE_TO 0
+#define LINE_TO 1
+#define QUAD_TO 2
+#define CUBIC_TO 3
+
+#define GET_CMD_PATH_INDEX(value) (value >> 16)
+#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
+
+struct BoundingBox
+{
+	vec4 minmax;
+};
+
+struct Path
+{
+	uint startCmdIndex;
+	uint endCmdIndex;
+	uint startTileIndex;
+	uint endTileIndex;
+	mat4 transform;
+	BoundingBox bbox;
+	uint color;
+	uint startVisibleTileIndex;
+	uint startSpanQuadIndex;
+	uint startTileQuadIndex;
+};
+
+struct Command
+{
+	uint pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
+	uint startIndexSimpleCommands;
+	uint endIndexSimpleCommands;
+	uint _pad0;
+	vec2 points[4]; // Maybe unused, but maximum 3 points for cubicTo
+	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
+};
+
+layout(std430, binding = 0) buffer Paths
+{
+	Path paths[];
+};
+
+layout(std430, binding = 1) buffer Commands
+{
+	Command commands[];
+};
+
+layout(std430, binding = 2) buffer Atomics
+{
+	uint simpleCommandsCount;
+};
+
+vec2 GetPreviousPoint(uint pathIndex, uint index)
+{
+	Path path = paths[pathIndex];
+	if (index == path.startCmdIndex)
+	{
+		return vec2(0, 0);
+	}
+
+	Command cmd = commands[index - 1];
+	uint pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+	switch (pathType)
+	{
+	case MOVE_TO:
+	case LINE_TO:
+		return cmd.transformedPoints[0];
+	case QUAD_TO:
+		return cmd.transformedPoints[1];
+	case CUBIC_TO:
+		return cmd.transformedPoints[2];
+	}
+}
+
+bool IsInsideViewSpace(in vec2 v)
+{
+	const float padding = 1.0;
+	return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
+}
+
+uint CalculateNumberOfSimpleCommands(Command cmd, vec2 last, float tolerance)
+{
+	uint pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+	switch (pathType)
+	{
+	case MOVE_TO:
+		return 1;
+	case LINE_TO:
+		return 1;
+	case QUAD_TO:
+	{
+		const vec2 p1 = cmd.transformedPoints[0];
+		const vec2 p2 = cmd.transformedPoints[1];
+
+		bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2);
+		if (!isVisible)
+		{
+			return 1;
+		}
+
+		const float dt = sqrt((4.0 * tolerance) / length(last - 2.0 * p1 + p2));
+		return uint(ceil(1.0 / dt));
+	}
+	case CUBIC_TO:
+	{
+		const vec2 p1 = cmd.transformedPoints[0];
+		const vec2 p2 = cmd.transformedPoints[1];
+		const vec2 p3 = cmd.transformedPoints[2];
+
+		bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2) || IsInsideViewSpace(p3);
+		if (!isVisible)
+		{
+			return 1;
+		}
+
+		const vec2 a = -1.0 * last + 3.0 * p1 - 3.0 * p2 + p3;
+		const vec2 b = 3.0 * (last - 2.0 * p1 + p2);
+		const float conc = max(length(b), length(a + b));
+		if (conc == 0.0f)
+		{
+			return 1;
+		}
+
+		const float dt = sqrt((sqrt(8.0) * tolerance) / conc);
+		return uint(ceil(1.0 / dt));
+	}
+	}
+
+	return 0;
+}
+
+shared uint pathIndex;
+//shared uint offset;
+shared Path path;
+shared uint numIter;
+
+void main()
+{
+	if (gl_LocalInvocationIndex == 0)
+	{
+		pathIndex = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+		if (pathIndex < paths.length())
+		{
+			path = paths[pathIndex];
+			//offset = path.startCmdIndex;
+			numIter = uint(ceil((path.endCmdIndex - path.startCmdIndex + 1) / float(WG_SIZE)));
+		}
+	}
+
+	barrier();
+
+	if (pathIndex < paths.length())
+	{
+		for (uint i = 0; i < numIter; i++)
+		{
+			uint cmdIndex = path.startCmdIndex + (i * WG_SIZE) + gl_LocalInvocationIndex;
+			if (cmdIndex <= paths[pathIndex].endCmdIndex)
+			{
+				Command cmd = commands[cmdIndex];
+				vec2 last = GetPreviousPoint(pathIndex, cmdIndex);
+				uint count = CalculateNumberOfSimpleCommands(cmd, last, 0.2);
+				uint xx = atomicAdd(simpleCommandsCount, count);
+				commands[cmdIndex].startIndexSimpleCommands = xx;
+				commands[cmdIndex].endIndexSimpleCommands = xx + count - 1;
+			}
+		}
+	}
+
+	barrier();
+
+	//if (gl_LocalInvocationIndex == 0)
+	//{
+	//	offset += 1024;
+	//}
+
+	barrier();
+}

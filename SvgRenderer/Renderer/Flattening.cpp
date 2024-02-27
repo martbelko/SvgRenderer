@@ -17,7 +17,7 @@ namespace SvgRenderer::Flattening {
 			return 1;
 		case PathCmdType::QuadTo:
 		{
-			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * cmd.as.quadTo.p1 + cmd.as.quadTo.p2)));
+			const float dt = glm::sqrt((4.0f * tolerance) / glm::length(last - 2.0f * cmd.as.quadTo.p1 + cmd.as.quadTo.p2));
 			return glm::ceil(1.0f / dt);
 		}
 		case PathCmdType::CubicTo:

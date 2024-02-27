@@ -19,11 +19,13 @@ namespace SvgRenderer {
 	#define MAKE_CMD_PATH_INDEX(value, index) ((index << 16) | (value & 0x0000FFFF))
 	#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0xFFFF00FF))
 
-#define ASYNC 1
-#if ASYNC == 1
-		static constexpr std::execution::parallel_policy executionPolicy = std::execution::par;
-#else
-		static constexpr std::execution::sequenced_policy executionPolicy = std::execution::seq;
+#define ASYNC 2
+#if ASYNC == 0
+	static constexpr std::execution::sequenced_policy executionPolicy = std::execution::seq;
+#elif ASYNC == 1
+	static constexpr std::execution::parallel_policy executionPolicy = std::execution::par;
+#elif ASYNC == 2 // GPU
+	static constexpr std::execution::parallel_policy executionPolicy = std::execution::par;
 #endif
 
 	struct SimpleCommand // Lines or moves only
