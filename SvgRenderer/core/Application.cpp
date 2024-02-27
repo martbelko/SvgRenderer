@@ -766,14 +766,18 @@ namespace SvgRenderer {
 #if ASYNC == 1
 		{
 			// 4.1 Calculate correct tile indices for each path according to its bounding box
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.paths.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
 			Timer timer41;
 			std::atomic_uint32_t tileCount = 0;
-			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [&tileCount](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
 				if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
 				{
-					continue;
+					return;
 				}
 
 				// TODO: We are not interested in tiles, where x-coord of the tile is above SCREEN_WIDTH, or y-coord is above SCREEN_HEIGHT
@@ -795,20 +799,8 @@ namespace SvgRenderer {
 				const uint32_t count = m_TileCountX * m_TileCountY;
 				path.startTileIndex = count;
 
-				//for (int32_t y = minTileCoordY; y <= maxTileCoordY; y++)
-				//{
-				//	for (int32_t x = minTileCoordX; x <= maxTileCoordX; x++)
-				//	{
-				//		Globals::Tiles.tiles.push_back(Tile{
-				//			.winding = 0,
-				//			.hasIncrements = false,
-				//			.increments = std::array<Increment, TILE_SIZE * TILE_SIZE>()
-				//			});
-				//	}
-				//}
-
 				tileCount += count;
-			}
+			});
 			SR_INFO("Step 4.1: {0} ms", timer41.ElapsedMillis());
 		}
 
