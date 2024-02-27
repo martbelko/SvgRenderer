@@ -591,8 +591,7 @@ namespace SvgRenderer {
 		};
 
 		Timer timer2;
-
-		uint32_t simpleCommandsCount = 0;
+		std::atomic_uint32_t simpleCommandsCount = 0;
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.paths.size());
@@ -602,12 +601,12 @@ namespace SvgRenderer {
 			std::array<uint32_t, wgSize> wgIndices;
 			std::iota(wgIndices.begin(), wgIndices.end(), 0);
 
-			std::for_each(std::execution::par, indices.begin(), indices.end(), [&getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
+			std::for_each(std::execution::par, indices.cbegin(), indices.cend(), [&simpleCommandsCount, &getPreviousPoint, &wgIndices, &wgSize](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
 				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
 				{
-					std::for_each(std::execution::par, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
+					std::for_each(std::execution::par, wgIndices.cbegin(), wgIndices.cend(), [&simpleCommandsCount, &path, &offsetCmdIndex, &getPreviousPoint](uint32_t wgIndex)
 					{
 						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
 						if (cmdIndex > path.endCmdIndex)
@@ -618,25 +617,13 @@ namespace SvgRenderer {
 						PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
 						glm::vec2 last = getPreviousPoint(path, cmdIndex);
 						uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
-						rndCmd.startIndexSimpleCommands = count;
+						uint32_t xx = simpleCommandsCount.fetch_add(count);
+						rndCmd.startIndexSimpleCommands = xx;
+						rndCmd.endIndexSimpleCommands = xx + count - 1;
 					});
 				}
 			});
-
-			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
-			{
-				const PathRender& path = Globals::AllPaths.paths[pathIndex];
-				for (uint32_t i = path.startCmdIndex; i <= path.endCmdIndex; i++)
-				{
-					PathRenderCmd& rndCmd = Globals::AllPaths.commands[i];
-					uint32_t count = rndCmd.startIndexSimpleCommands;
-					rndCmd.startIndexSimpleCommands = simpleCommandsCount;
-					simpleCommandsCount += count;
-					rndCmd.endIndexSimpleCommands = simpleCommandsCount - 1;
-				}
-			}
 		}
-
 		SR_INFO("Step 2: {0} ms", timer2.ElapsedMillis());
 
 		// Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
