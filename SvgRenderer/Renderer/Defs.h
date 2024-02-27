@@ -60,7 +60,7 @@ namespace SvgRenderer {
 		float height = 0;
 	};
 
-	constexpr float TOLERANCE = 0.05f;
+	constexpr float TOLERANCE = 0.2f; // Quality of flattening
 	constexpr int8_t TILE_SIZE = 16;
 	constexpr uint32_t ATLAS_SIZE = 4096 * 2;
 
