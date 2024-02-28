@@ -482,7 +482,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -692,33 +692,15 @@ namespace SvgRenderer {
 				uint32_t m_TileCountY = maxTileCoordY - minTileCoordY + 1;
 
 				const uint32_t count = m_TileCountX * m_TileCountY;
-				path.startTileIndex = count;
 
-				tileCount += count;
+				uint32_t xx = tileCount.fetch_add(count);
+				path.startTileIndex = xx;
+				path.endTileIndex = xx + count - 1;
 			});
 			SR_TRACE("Step 4.1: {0} ms", timer41.ElapsedMillis());
 		}
 
-		// 4.2: ...TODO: Add description
-		Timer timer42;
-		uint32_t tileCount = 0;
-		uint32_t visibleTileCount = 0;
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
-		{
-			PathRender& path = Globals::AllPaths.paths[pathIndex];
-			uint32_t count = path.startTileIndex;
-			path.startTileIndex = tileCount;
-			tileCount += count;
-			path.endTileIndex = tileCount - 1;
-
-			uint32_t visibleCount = path.startVisibleTileIndex;
-			path.startVisibleTileIndex = visibleTileCount;
-			visibleTileCount += visibleCount;
-		}
-
-		SR_TRACE("Step 4.2: {0} ms", timer42.ElapsedMillis());
-
-		// 4.3: ...TODO: Add desc
+		// 4.2: ...TODO: Add desc
 		std::vector<uint32_t> indices;
 		indices.resize(Globals::AllPaths.paths.size());
 		std::iota(indices.begin(), indices.end(), 0);
@@ -739,7 +721,7 @@ namespace SvgRenderer {
 			SR_TRACE("Filling: {0}", timer43.ElapsedMillis());
 		}
 
-		// 4.4 Calculate corrent count and indices for vertices of each path
+		// 4.3: Calculate corrent count and indices for vertices of each path
 		Timer timer44;
 		uint32_t accumCount = 0;
 		uint32_t accumTileCount = 0;
@@ -767,7 +749,7 @@ namespace SvgRenderer {
 		const size_t numberOfIndices = accumCount * 6;
 		m_TileBuilder.indices.reserve(numberOfIndices);
 
-		// 4.5: ... TODO: Add desc
+		// 4.4: ... TODO: Add desc
 		Timer timer45;
 		uint32_t base = 0;
 		for (size_t i = 0; i < numberOfIndices; i += 6)
@@ -782,7 +764,7 @@ namespace SvgRenderer {
 		}
 		SR_TRACE("Step 4.5: {0}", timer45.ElapsedMillis());
 
-		// 4.6 The rest
+		// 4.5: The rest
 		Timer timerRest;
 		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 		{
