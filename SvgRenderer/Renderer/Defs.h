@@ -31,6 +31,7 @@ namespace SvgRenderer {
 	struct SimpleCommand // Lines or moves only
 	{
 		uint32_t type;
+		uint32_t _pad;
 		glm::vec2 point;
 	};
 

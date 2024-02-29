@@ -493,24 +493,28 @@ namespace SvgRenderer {
 		Globals::Tiles.tiles.resize(1'000'000); // This remains fixed for the whole run of the program, may change in the future
 
 #if ASYNC == 2
-		GLuint cmdBuf, pathBuf, atomicBuf;
+		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf;
 		glCreateBuffers(1, &cmdBuf);
 		glCreateBuffers(1, &pathBuf);
+		glCreateBuffers(1, &simpleCmdBuf);
 		glCreateBuffers(1, &atomicBuf);
 
 		GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
 		glNamedBufferStorage(cmdBuf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
 		glNamedBufferStorage(pathBuf, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
+		glNamedBufferStorage(simpleCmdBuf, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data(), bufferFlags);
 
 		uint32_t atomCounter = 0;
 		glNamedBufferStorage(atomicBuf, sizeof(uint32_t), &atomCounter, bufferFlags);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, pathBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, cmdBuf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, atomicBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, simpleCmdBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, atomicBuf);
 
 		Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
 		Ref<Shader> shader2 = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test1.comp");
+		Ref<Shader> shaderFlatten = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Flatten.comp");
 
 		SR_INFO("Running in GPU mode\n");
 #elif ASYNC == 1
@@ -544,9 +548,9 @@ namespace SvgRenderer {
 
 			Timer tsTimer;
 			std::for_each(executionPolicy, indices.begin(), indices.end(), [](uint32_t cmdIndex)
-				{
-					TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
-				});
+			{
+				TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
+			});
 			SR_TRACE("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
 		}
 #endif
@@ -557,24 +561,12 @@ namespace SvgRenderer {
 		shader2->Bind();
 		{
 			uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.paths.size() / 65535.0f), 1.0f);
-			shader2->Dispatch(65535, 1, 1);
+			shader2->Dispatch(65535, ySize, 1);
 		}
 
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 		SR_TRACE("Step 2: {0} ms", timer2.ElapsedMillis());
-
-		Timer gpuToCpuTimer;
-
-		glGetNamedBufferSubData(cmdBuf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
-		glGetNamedBufferSubData(pathBuf, 0, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data());
-		glGetNamedBufferSubData(atomicBuf, 0, sizeof(uint32_t), &atomCounter);
-
-		glDeleteBuffers(1, &cmdBuf);
-		glDeleteBuffers(1, &pathBuf);
-		glDeleteBuffers(1, &atomicBuf);
-
-		SR_WARN("GPU -> CPU: {0} ms", gpuToCpuTimer.ElapsedMillis());
 #else
 		std::atomic_uint32_t simpleCommandsCount = 0;
 		{
@@ -605,10 +597,38 @@ namespace SvgRenderer {
 
 		// Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
 #endif
-
 		// 3.step: Simplify the commands and store in the array
+#if ASYNC == 2
+		// 3.1: Flattening
 		{
-			// 3.1 Flattening
+			Timer timerFlatten;
+			shaderFlatten->Bind();
+			{
+				uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.paths.size() / 65535.0f), 1.0f);
+				shaderFlatten->Dispatch(65535, ySize, 1);
+			}
+
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
+
+			Timer gpuToCpuTimer;
+
+			glGetNamedBufferSubData(cmdBuf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
+			glGetNamedBufferSubData(pathBuf, 0, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data());
+			glGetNamedBufferSubData(simpleCmdBuf, 0, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data());
+			glGetNamedBufferSubData(atomicBuf, 0, sizeof(uint32_t), &atomCounter);
+
+			glDeleteBuffers(1, &cmdBuf);
+			glDeleteBuffers(1, &pathBuf);
+			glDeleteBuffers(1, &simpleCmdBuf);
+			glDeleteBuffers(1, &atomicBuf);
+
+			SR_WARN("GPU -> CPU: {0} ms", gpuToCpuTimer.ElapsedMillis());
+		}
+#else
+		// 3.1: Flattening
+		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.paths.size());
 			std::iota(indices.begin(), indices.end(), 0);
@@ -638,8 +658,14 @@ namespace SvgRenderer {
 				}
 			});
 			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
+		}
+#endif
+		// 3.2: Calculating BBOX
+		{
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.paths.size());
+			std::iota(indices.begin(), indices.end(), 0);
 
-			// 3.1 Calculating BBOX
 			Timer timerBbox;
 			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
 			{

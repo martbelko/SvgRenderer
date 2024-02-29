@@ -41,6 +41,12 @@ struct Command
 	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
 };
 
+struct SimpleCommand // Lines or moves only
+{
+	uint type;
+	vec2 point;
+};
+
 layout(std430, binding = 0) buffer Paths
 {
 	Path paths[];
@@ -51,20 +57,25 @@ layout(std430, binding = 1) buffer Commands
 	Command commands[];
 };
 
+layout(std430, binding = 2) buffer SimpleCommands
+{
+	SimpleCommand simpleCommands[];
+};
+
 layout(std430, binding = 3) buffer Atomics
 {
 	uint simpleCommandsCount;
 };
 
-vec2 GetPreviousPoint(uint pathIndex, uint index)
+vec2 GetPreviousPoint(uint pathIndex, uint cmdIndex)
 {
 	Path path = paths[pathIndex];
-	if (index == path.startCmdIndex)
+	if (cmdIndex == path.startCmdIndex)
 	{
 		return vec2(0, 0);
 	}
 
-	Command cmd = commands[index - 1];
+	Command cmd = commands[cmdIndex - 1];
 	uint pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
 	switch (pathType)
 	{
@@ -135,20 +146,115 @@ uint CalculateNumberOfSimpleCommands(Command cmd, vec2 last, float tolerance)
 	return 0;
 }
 
-shared uint pathIndex;
-//shared uint offset;
-shared Path path;
+shared BoundingBox pathBbox;
+
+void AddBboxPoint(in vec2 point)
+{
+	pathBbox.minmax.xy = min(pathBbox.minmax.xy, point);
+	pathBbox.minmax.zw = max(pathBbox.minmax.zw, point);
+}
+
+vec2 lerp(in vec2 v0, in vec2 v1, float t)
+{
+	return (1.0 - t) * v0 + t * v1;
+}
+
+void Flatten(in Command cmd, in vec2 last, float tolerance)
+{
+	uint index = cmd.startIndexSimpleCommands;
+
+	uint pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+	switch (pathType)
+	{
+	case MOVE_TO:
+	{
+		simpleCommands[index] = SimpleCommand(MOVE_TO, cmd.transformedPoints[0]);
+		AddBboxPoint(cmd.transformedPoints[0]);
+		break;
+	}
+	case LINE_TO:
+	{
+		const vec2 p = cmd.transformedPoints[0];
+		simpleCommands[index] = SimpleCommand(LINE_TO, p);
+		AddBboxPoint(p);
+		break;
+	}
+	case QUAD_TO:
+	{
+		const vec2 p1 = cmd.transformedPoints[0];
+		const vec2 p2 = cmd.transformedPoints[1];
+
+		bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2);
+		if (!isVisible)
+		{
+			simpleCommands[index++] = SimpleCommand(LINE_TO, p2);
+			break;
+		}
+
+		const float dt = sqrt(((4.0 * tolerance) / length(last - 2.0 * p1 + p2)));
+		float t = 0.0f;
+		while (t < 1.0f)
+		{
+			t = min(t + dt, 1.0);
+			const vec2 p01 = lerp(last, p1, t);
+			const vec2 p12 = lerp(p1, p2, t);
+			const vec2 p1 = lerp(p01, p12, t);
+
+			simpleCommands[index++] = SimpleCommand(LINE_TO, p1);
+			AddBboxPoint(p1);
+		}
+
+		break;
+	}
+	case CUBIC_TO:
+	{
+		const vec2 p1 = cmd.transformedPoints[0];
+		const vec2 p2 = cmd.transformedPoints[1];
+		const vec2 p3 = cmd.transformedPoints[2];
+
+		bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2) || IsInsideViewSpace(p3);
+		if (!isVisible)
+		{
+			simpleCommands[index++] = SimpleCommand(LINE_TO, p3);
+			break;
+		}
+
+		const vec2 a = -1.0 * last + 3.0 * p1 - 3.0 * p2 + p3;
+		const vec2 b = 3.0 * (last - 2.0 * p1 + p2);
+		const float conc = max(length(b), length(a + b));
+		const float dt = sqrt((sqrt(8.0) * tolerance) / conc);
+		float t = 0.0f;
+
+		while (t < 1.0f)
+		{
+			t = min(t + dt, 1.0f);
+			const vec2 p01 = lerp(last, p1, t);
+			const vec2 p12 = lerp(p1, p2, t);
+			const vec2 p23 = lerp(p2, p3, t);
+			const vec2 p012 = lerp(p01, p12, t);
+			const vec2 p123 = lerp(p12, p23, t);
+			const vec2 p1 = lerp(p012, p123, t);
+
+			simpleCommands[index++] = SimpleCommand(LINE_TO, p1);
+			AddBboxPoint(p1);
+		}
+
+		break;
+	}
+	}
+}
+
 shared uint numIter;
+shared Path path;
 
 void main()
 {
-	if (gl_LocalInvocationIndex == 0)
+	uint pathIndex = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+	if (pathIndex < paths.length())
 	{
-		pathIndex = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
-		if (pathIndex < paths.length())
+		if (gl_LocalInvocationIndex == 0)
 		{
 			path = paths[pathIndex];
-			//offset = path.startCmdIndex;
 			numIter = uint(ceil((path.endCmdIndex - path.startCmdIndex + 1) / float(WG_SIZE)));
 		}
 	}
@@ -164,10 +270,8 @@ void main()
 			{
 				Command cmd = commands[cmdIndex];
 				vec2 last = GetPreviousPoint(pathIndex, cmdIndex);
-				uint count = CalculateNumberOfSimpleCommands(cmd, last, 0.2);
-				uint xx = atomicAdd(simpleCommandsCount, count);
-				commands[cmdIndex].startIndexSimpleCommands = xx;
-				commands[cmdIndex].endIndexSimpleCommands = xx + count - 1;
+				Flatten(cmd, last, 0.2);
+				commands[cmdIndex] = cmd;
 			}
 		}
 	}
