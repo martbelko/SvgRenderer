@@ -146,12 +146,21 @@ uint CalculateNumberOfSimpleCommands(Command cmd, vec2 last, float tolerance)
 	return 0;
 }
 
-shared BoundingBox pathBbox;
+shared int pathBboxMinX;
+shared int pathBboxMinY;
+shared int pathBboxMaxX;
+shared int pathBboxMaxY;
 
 void AddBboxPoint(in vec2 point)
 {
-	pathBbox.minmax.xy = min(pathBbox.minmax.xy, point);
-	pathBbox.minmax.zw = max(pathBbox.minmax.zw, point);
+	const float accuracy = 1000;
+	int x = int(point.x * accuracy);
+	int y = int(point.y * accuracy);
+
+	atomicMin(pathBboxMinX, x);
+	atomicMin(pathBboxMinY, y);
+	atomicMax(pathBboxMaxX, x);
+	atomicMax(pathBboxMaxY, y);
 }
 
 vec2 lerp(in vec2 v0, in vec2 v1, float t)
@@ -192,7 +201,7 @@ void Flatten(in Command cmd, in vec2 last, float tolerance)
 		}
 
 		const float dt = sqrt(((4.0 * tolerance) / length(last - 2.0 * p1 + p2)));
-		float t = 0.0f;
+		float t = 0.0;
 		while (t < 1.0f)
 		{
 			t = min(t + dt, 1.0);
@@ -223,11 +232,11 @@ void Flatten(in Command cmd, in vec2 last, float tolerance)
 		const vec2 b = 3.0 * (last - 2.0 * p1 + p2);
 		const float conc = max(length(b), length(a + b));
 		const float dt = sqrt((sqrt(8.0) * tolerance) / conc);
-		float t = 0.0f;
+		float t = 0.0;
 
-		while (t < 1.0f)
+		while (t < 1.0)
 		{
-			t = min(t + dt, 1.0f);
+			t = min(t + dt, 1.0);
 			const vec2 p01 = lerp(last, p1, t);
 			const vec2 p12 = lerp(p1, p2, t);
 			const vec2 p23 = lerp(p2, p3, t);
@@ -256,6 +265,11 @@ void main()
 		{
 			path = paths[pathIndex];
 			numIter = uint(ceil((path.endCmdIndex - path.startCmdIndex + 1) / float(WG_SIZE)));
+
+			pathBboxMinX = 2147483647;
+			pathBboxMinY = 2147483647;
+			pathBboxMaxX = -2147483648;
+			pathBboxMaxY = -2147483648;
 		}
 	}
 
@@ -273,6 +287,18 @@ void main()
 				Flatten(cmd, last, 0.2);
 				commands[cmdIndex] = cmd;
 			}
+		}
+	}
+
+	barrier();
+
+	if (pathIndex < paths.length())
+	{
+		if (gl_LocalInvocationIndex == 0)
+		{
+			const float mult = 0.001;
+			paths[pathIndex].bbox.minmax = vec4(pathBboxMinX * mult, pathBboxMinY * mult, pathBboxMaxX * mult, pathBboxMaxY * mult);
+			paths[pathIndex].bbox.minmax += vec4(-2, -2, 2, 2);
 		}
 	}
 }

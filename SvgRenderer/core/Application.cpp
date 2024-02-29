@@ -599,7 +599,7 @@ namespace SvgRenderer {
 #endif
 		// 3.step: Simplify the commands and store in the array
 #if ASYNC == 2
-		// 3.1: Flattening
+		// 3.1: Flattening and computing bbox
 		{
 			Timer timerFlatten;
 			shaderFlatten->Bind();
@@ -661,6 +661,7 @@ namespace SvgRenderer {
 		}
 #endif
 		// 3.2: Calculating BBOX
+#if ASYNC != 2
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.paths.size());
@@ -683,6 +684,7 @@ namespace SvgRenderer {
 			});
 			SR_TRACE("Calculating BBOX: {0} ms", timerBbox.ElapsedMillis());
 		}
+#endif
 
 		// 4.step: The rest
 		{
