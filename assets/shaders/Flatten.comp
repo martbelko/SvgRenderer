@@ -153,7 +153,7 @@ shared int pathBboxMaxY;
 
 void AddBboxPoint(in vec2 point)
 {
-	const float accuracy = 1000;
+	const float accuracy = 10;
 	int x = int(point.x * accuracy);
 	int y = int(point.y * accuracy);
 
@@ -177,8 +177,9 @@ void Flatten(in Command cmd, in vec2 last, float tolerance)
 	{
 	case MOVE_TO:
 	{
-		simpleCommands[index] = SimpleCommand(MOVE_TO, cmd.transformedPoints[0]);
-		AddBboxPoint(cmd.transformedPoints[0]);
+		const vec2 point = cmd.transformedPoints[0];
+		simpleCommands[index] = SimpleCommand(MOVE_TO, point);
+		AddBboxPoint(point);
 		break;
 	}
 	case LINE_TO:
@@ -197,6 +198,7 @@ void Flatten(in Command cmd, in vec2 last, float tolerance)
 		if (!isVisible)
 		{
 			simpleCommands[index++] = SimpleCommand(LINE_TO, p2);
+			AddBboxPoint(p2);
 			break;
 		}
 
@@ -225,6 +227,7 @@ void Flatten(in Command cmd, in vec2 last, float tolerance)
 		if (!isVisible)
 		{
 			simpleCommands[index++] = SimpleCommand(LINE_TO, p3);
+			AddBboxPoint(p3);
 			break;
 		}
 
@@ -296,7 +299,7 @@ void main()
 	{
 		if (gl_LocalInvocationIndex == 0)
 		{
-			const float mult = 0.001;
+			const float mult = 0.1;
 			paths[pathIndex].bbox.minmax = vec4(pathBboxMinX * mult, pathBboxMinY * mult, pathBboxMaxX * mult, pathBboxMaxY * mult);
 			paths[pathIndex].bbox.minmax += vec4(-2, -2, 2, 2);
 		}
