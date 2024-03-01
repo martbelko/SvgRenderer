@@ -96,6 +96,9 @@ namespace SvgRenderer::Flattening {
 
 	bool IsInsideViewSpace(const glm::vec2& v)
 	{
+		// TODO: This needs to be fixed, and actually checked for bunch of points, if the polygon
+		// created out of these points lie completely outside of the view space (screen)
+		return true;
 		constexpr float padding = 1.0f;
 		return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
 	}
