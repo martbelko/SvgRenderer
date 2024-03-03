@@ -779,11 +779,11 @@ namespace SvgRenderer {
 
 		}
 #else
-		std::vector<uint32_t> indices;
-		indices.resize(Globals::AllPaths.paths.size());
-		std::iota(indices.begin(), indices.end(), 0);
-
 		{
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.paths.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
 			Timer timer43;
 			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 			{
@@ -800,35 +800,62 @@ namespace SvgRenderer {
 		}
 #endif
 		// 4.3: Calculate correct count and indices for vertices of each path
-		Timer timer44;
-		uint32_t accumCount = 0;
-		uint32_t accumTileCount = 0;
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
-			PathRender& path = Globals::AllPaths.paths[pathIndex];
-			if (!Flattening::IsBboxInsideViewSpace(path.bbox))
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.paths.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
+			Timer timer43;
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 			{
-				continue;
-			}
+				PathRender& path = Globals::AllPaths.paths[pathIndex];
+				if (!Flattening::IsBboxInsideViewSpace(path.bbox))
+				{
+					return;
+				}
 
-			Rasterizer rast(path.bbox, pathIndex);
+				Rasterizer rast(path.bbox, pathIndex);
 
-			auto [coarseQuadCount, fineQuadCount] = rast.CalculateNumberOfQuads();
-			path.startSpanQuadIndex = accumCount;
-			path.startTileQuadIndex = accumCount + coarseQuadCount;
-			accumCount += coarseQuadCount + fineQuadCount;
-
-			path.startVisibleTileIndex = accumTileCount;
-			accumTileCount += fineQuadCount;
+				auto [coarseQuadCount, fineQuadCount] = rast.CalculateNumberOfQuads();
+				path.startSpanQuadIndex = coarseQuadCount;
+				path.startTileQuadIndex = fineQuadCount;
+			});
+			SR_TRACE("Step 4.3: {0}", timer43.ElapsedMillis());
 		}
-		SR_TRACE("Step 4.4: {0}", timer44.ElapsedMillis());
+
+		// 4.4: Calculate correct tile indices for each path
+		{
+			Timer timer44;
+			uint32_t accumCount = 0;
+			uint32_t accumTileCount = 0;
+			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+			{
+				PathRender& path = Globals::AllPaths.paths[pathIndex];
+				if (!Flattening::IsBboxInsideViewSpace(path.bbox))
+				{
+					continue;
+				}
+
+				Rasterizer rast(path.bbox, pathIndex);
+
+				uint32_t coarseQuadCount = path.startSpanQuadIndex;
+				uint32_t fineQuadCount = path.startTileQuadIndex;
+				path.startSpanQuadIndex = accumCount;
+				path.startTileQuadIndex = accumCount + coarseQuadCount;
+				accumCount += coarseQuadCount + fineQuadCount;
+
+				path.startVisibleTileIndex = accumTileCount;
+				accumTileCount += fineQuadCount;
+			}
+			SR_TRACE("Step 4.4: {0}", timer44.ElapsedMillis());
+		}
 
 		std::vector<uint32_t> indices;
 		indices.resize(Globals::AllPaths.paths.size());
 		std::iota(indices.begin(), indices.end(), 0);
 
-		// 4.5: The rest
-		Timer timerRest;
+		// 4.5: Coarse
+		Timer timerCoarse;
 		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
@@ -839,9 +866,23 @@ namespace SvgRenderer {
 
 			Rasterizer rast(path.bbox, pathIndex);
 			rast.Coarse(m_TileBuilder);
+		});
+		SR_TRACE("Coarse: {0}", timerCoarse.ElapsedMillis());
+
+		// 4.6: Fine
+		Timer timerFine;
+		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
+		{
+			const PathRender& path = Globals::AllPaths.paths[pathIndex];
+			if (!Flattening::IsBboxInsideViewSpace(path.bbox))
+			{
+				return;
+			}
+
+			Rasterizer rast(path.bbox, pathIndex);
 			rast.Finish(m_TileBuilder);
 		});
-		SR_TRACE("Coarse and Fine: {0}", timerRest.ElapsedMillis());
+		SR_TRACE("Fine: {0}", timerFine.ElapsedMillis());
 
 		SR_INFO("Total execution time: {0} ms", globalTimer.ElapsedMillis());
 	}
