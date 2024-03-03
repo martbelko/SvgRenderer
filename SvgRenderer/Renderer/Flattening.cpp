@@ -57,7 +57,7 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 
-			bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2);
+			bool isVisible = IsLineInsideViewSpace(last, p1) || IsLineInsideViewSpace(p1, p2) || IsLineInsideViewSpace(p2, last);
 			if (!isVisible)
 			{
 				return 1;
@@ -72,7 +72,7 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 			const glm::vec2& p3 = cmd.transformedPoints[2];
 
-			bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2) || IsInsideViewSpace(p3);
+			bool isVisible = IsLineInsideViewSpace(last, p1) || IsLineInsideViewSpace(p1, p2) || IsLineInsideViewSpace(p2, p3) || IsLineInsideViewSpace(p3, last);
 			if (!isVisible)
 			{
 				return 1;
@@ -94,13 +94,101 @@ namespace SvgRenderer::Flattening {
 		return 0;
 	}
 
-	bool IsInsideViewSpace(const glm::vec2& v)
+	bool IsPointInsideViewSpace(const glm::vec2& v)
 	{
-		// TODO: This needs to be fixed, and actually checked for bunch of points, if the polygon
-		// created out of these points lie completely outside of the view space (screen)
-		return true;
 		constexpr float padding = 1.0f;
 		return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
+	}
+
+	typedef int OutCode;
+
+	const int INSIDE = 0; // 0000
+	const int LEFT = 1;   // 0001
+	const int RIGHT = 2;  // 0010
+	const int BOTTOM = 4; // 0100
+	const int TOP = 8;    // 1000
+
+	OutCode ComputeOutCode(const glm::vec2& p)
+	{
+		OutCode code = INSIDE;
+
+		if (p.x < 0.0f)
+			code |= LEFT;
+		else if (p.x > SCREEN_WIDTH)
+			code |= RIGHT;
+		if (p.y < 0.0f)
+			code |= BOTTOM;
+		else if (p.y > SCREEN_HEIGHT)
+			code |= TOP;
+
+		return code;
+	}
+
+	bool IsLineInsideViewSpace(glm::vec2 p0, glm::vec2 p1)
+	{
+		OutCode outcode0 = ComputeOutCode(p0);
+		OutCode outcode1 = ComputeOutCode(p1);
+		bool accept = false;
+
+		while (true)
+		{
+			if (!(outcode0 | outcode1))
+			{
+				accept = true;
+				break;
+			}
+			else if (outcode0 & outcode1)
+			{
+				break;
+			}
+			else
+			{
+				float x, y;
+				OutCode outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
+				if (outcodeOut & TOP)
+				{
+					x = p0.x + (p1.x - p0.x) * (SCREEN_HEIGHT - p0.y) / (p1.y - p0.y);
+					y = SCREEN_HEIGHT;
+				}
+				else if (outcodeOut & BOTTOM)
+				{
+					x = p0.x + (p1.x - p0.x) * (-p0.y) / (p1.y - p0.y);
+					y = 0;
+				}
+				else if (outcodeOut & RIGHT)
+				{
+					y = p0.y + (p1.y - p0.y) * (SCREEN_WIDTH - p0.x) / (p1.x - p0.x);
+					x = SCREEN_WIDTH;
+				}
+				else if (outcodeOut & LEFT)
+				{
+					y = p0.y + (p1.y - p0.y) * (-p0.x) / (p1.x - p0.x);
+					x = 0;
+				}
+
+				if (outcodeOut == outcode0)
+				{
+					p0.x = x;
+					p0.y = y;
+					outcode0 = ComputeOutCode(p0);
+				}
+				else
+				{
+					p1.x = x;
+					p1.y = y;
+					outcode1 = ComputeOutCode(p1);
+				}
+			}
+		}
+
+		return accept;
+	}
+
+	bool IsBboxInsideViewSpace(const BoundingBox& bbox)
+	{
+		glm::vec2 p1 = glm::vec2(bbox.min.x, bbox.max.y);
+		glm::vec2 p2 = glm::vec2(bbox.max.x, bbox.min.y);
+		return IsLineInsideViewSpace(bbox.min, bbox.max) || IsLineInsideViewSpace(p1, p2);
 	}
 
 	BoundingBox FlattenIntoArray(const PathRenderCmd& cmd, glm::vec2 last, float tolerance)
@@ -129,7 +217,7 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 
-			bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2);
+			bool isVisible = IsLineInsideViewSpace(last, p1) || IsLineInsideViewSpace(p1, p2) || IsLineInsideViewSpace(p2, last);
 			if (!isVisible)
 			{
 				Globals::AllPaths.simpleCommands[index++] = SimpleCommand{ .type = LINE_TO, .point = p2 };
@@ -157,7 +245,7 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 			const glm::vec2& p3 = cmd.transformedPoints[2];
 
-			bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2) || IsInsideViewSpace(p3);
+			bool isVisible = IsLineInsideViewSpace(last, p1) || IsLineInsideViewSpace(p1, p2) || IsLineInsideViewSpace(p2, p3) || IsLineInsideViewSpace(p3, last);
 			if (!isVisible)
 			{
 				Globals::AllPaths.simpleCommands[index++] = SimpleCommand{ .type = LINE_TO, .point = p3 };

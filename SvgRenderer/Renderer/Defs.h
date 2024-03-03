@@ -19,7 +19,7 @@ namespace SvgRenderer {
 	#define MAKE_CMD_PATH_INDEX(value, index) ((index << 16) | (value & 0x0000FFFF))
 	#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0xFFFF00FF))
 
-#define ASYNC 2
+#define ASYNC 1
 #if ASYNC == 0
 	static constexpr std::execution::sequenced_policy executionPolicy = std::execution::seq;
 #elif ASYNC == 1
@@ -47,6 +47,10 @@ namespace SvgRenderer {
 		uint32_t startVisibleTileIndex;
 		uint32_t startSpanQuadIndex;
 		uint32_t startTileQuadIndex;
+		bool isBboxVisible;
+		uint32_t _pad0;
+		uint32_t _pad1;
+		uint32_t _pad2;
 	};
 
 	struct PathRenderCmd
@@ -72,7 +76,7 @@ namespace SvgRenderer {
 		float height = 0;
 	};
 
-	constexpr float TOLERANCE = 0.2f; // Quality of flattening
+	constexpr float TOLERANCE = 0.05f; // Quality of flattening
 	constexpr int8_t TILE_SIZE = 16;
 	constexpr uint32_t ATLAS_SIZE = 4096 * 2;
 
@@ -95,7 +99,7 @@ namespace SvgRenderer {
 	class Globals
 	{
 	public:
-		inline static glm::mat4 GlobalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0))* glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
+		inline static glm::mat4 GlobalTransform = glm::mat4(1.0f); //glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0))* glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
 		inline static PathsContainer AllPaths;
 		inline static TilesContainer Tiles;
 	};

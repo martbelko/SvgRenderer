@@ -482,7 +482,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -698,7 +698,7 @@ namespace SvgRenderer {
 			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&tileCount](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
-				if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
+				if (!Flattening::IsBboxInsideViewSpace(path.bbox))
 				{
 					return;
 				}
@@ -738,7 +738,7 @@ namespace SvgRenderer {
 			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
-				if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
+				if (!Flattening::IsBboxInsideViewSpace(path.bbox))
 				{
 					return;
 				}
@@ -756,7 +756,7 @@ namespace SvgRenderer {
 		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
 			PathRender& path = Globals::AllPaths.paths[pathIndex];
-			if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
+			if (!Flattening::IsBboxInsideViewSpace(path.bbox))
 			{
 				continue;
 			}
@@ -797,7 +797,7 @@ namespace SvgRenderer {
 		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
-			if (!Flattening::IsInsideViewSpace(path.bbox.min) && !Flattening::IsInsideViewSpace(path.bbox.max))
+			if (!Flattening::IsBboxInsideViewSpace(path.bbox))
 			{
 				return;
 			}
