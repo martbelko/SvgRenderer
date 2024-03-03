@@ -29,6 +29,10 @@ struct Path
 	uint startVisibleTileIndex;
 	uint startSpanQuadIndex;
 	uint startTileQuadIndex;
+	bool isBboxVisible;
+	uint _pad0;
+	uint _pad1;
+	uint _pad2;
 };
 
 struct Command
@@ -78,10 +82,100 @@ vec2 GetPreviousPoint(uint pathIndex, uint index)
 	}
 }
 
-bool IsInsideViewSpace(in vec2 v)
+bool IsPointInsideViewSpace(in vec2 v)
 {
+	// TODO: Set for width and height of the window
 	const float padding = 1.0;
 	return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
+}
+
+const int INSIDE = 0; // 0000
+const int LEFT = 1;   // 0001
+const int RIGHT = 2;  // 0010
+const int BOTTOM = 4; // 0100
+const int TOP = 8;    // 1000
+
+int ComputeOutCode(in vec2 p)
+{
+	int code = INSIDE;
+
+	if (p.x < 0.0f)
+		code |= LEFT;
+	else if (p.x > 1900.0)
+		code |= RIGHT;
+	if (p.y < 0.0f)
+		code |= BOTTOM;
+	else if (p.y > 1000.0)
+		code |= TOP;
+
+	return code;
+}
+
+bool IsLineInsideViewSpace(vec2 p0, vec2 p1)
+{
+	int outcode0 = ComputeOutCode(p0);
+	int outcode1 = ComputeOutCode(p1);
+	bool accept = false;
+
+	while (true)
+	{
+		if (!bool(outcode0 | outcode1))
+		{
+			accept = true;
+			break;
+		}
+		else if (bool(outcode0 & outcode1))
+		{
+			break;
+		}
+		else
+		{
+			float x, y;
+			int outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
+			if (bool(outcodeOut & TOP))
+			{
+				x = p0.x + (p1.x - p0.x) * (1000 - p0.y) / (p1.y - p0.y);
+				y = 1000;
+			}
+			else if (bool(outcodeOut & BOTTOM))
+			{
+				x = p0.x + (p1.x - p0.x) * (-p0.y) / (p1.y - p0.y);
+				y = 0;
+			}
+			else if (bool(outcodeOut & RIGHT))
+			{
+				y = p0.y + (p1.y - p0.y) * (1900 - p0.x) / (p1.x - p0.x);
+				x = 1900;
+			}
+			else if (bool(outcodeOut & LEFT))
+			{
+				y = p0.y + (p1.y - p0.y) * (-p0.x) / (p1.x - p0.x);
+				x = 0;
+			}
+
+			if (outcodeOut == outcode0)
+			{
+				p0.x = x;
+				p0.y = y;
+				outcode0 = ComputeOutCode(p0);
+			}
+			else
+			{
+				p1.x = x;
+				p1.y = y;
+				outcode1 = ComputeOutCode(p1);
+			}
+		}
+	}
+
+	return accept;
+}
+
+bool IsBboxInsideViewSpace(in BoundingBox bbox)
+{
+	vec2 p1 = vec2(bbox.minmax.x, bbox.minmax.w);
+	vec2 p2 = vec2(bbox.minmax.z, bbox.minmax.y);
+	return IsLineInsideViewSpace(bbox.minmax.xy, bbox.minmax.zw) || IsLineInsideViewSpace(p1, p2);
 }
 
 uint CalculateNumberOfSimpleCommands(Command cmd, vec2 last, float tolerance)
@@ -98,7 +192,7 @@ uint CalculateNumberOfSimpleCommands(Command cmd, vec2 last, float tolerance)
 		const vec2 p1 = cmd.transformedPoints[0];
 		const vec2 p2 = cmd.transformedPoints[1];
 
-		bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2);
+		bool isVisible = IsLineInsideViewSpace(last, p1) || IsLineInsideViewSpace(p1, p2) || IsLineInsideViewSpace(p2, last);
 		if (!isVisible)
 		{
 			return 1;
@@ -113,7 +207,7 @@ uint CalculateNumberOfSimpleCommands(Command cmd, vec2 last, float tolerance)
 		const vec2 p2 = cmd.transformedPoints[1];
 		const vec2 p3 = cmd.transformedPoints[2];
 
-		bool isVisible = IsInsideViewSpace(last) || IsInsideViewSpace(p1) || IsInsideViewSpace(p2) || IsInsideViewSpace(p3);
+		bool isVisible = IsLineInsideViewSpace(last, p1) || IsLineInsideViewSpace(p1, p2) || IsLineInsideViewSpace(p2, p3) || IsLineInsideViewSpace(p3, last);
 		if (!isVisible)
 		{
 			return 1;

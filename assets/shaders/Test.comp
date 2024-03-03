@@ -21,6 +21,10 @@ struct Path
 	uint startVisibleTileIndex;
 	uint startSpanQuadIndex;
 	uint startTileQuadIndex;
+	bool isBboxVisible;
+	uint _pad0;
+	uint _pad1;
+	uint _pad2;
 };
 
 struct Command
