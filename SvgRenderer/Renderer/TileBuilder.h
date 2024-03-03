@@ -19,7 +19,7 @@ namespace SvgRenderer {
 	public:
 		std::vector<Vertex> vertices;
 		std::vector<uint32_t> indices;
-		std::vector<uint8_t> atlas;
+		std::vector<float> atlas;
 
 		TileBuilder();
 

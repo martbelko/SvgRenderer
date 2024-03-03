@@ -13,7 +13,7 @@ namespace SvgRenderer {
 		{
 			for (uint32_t col = 0; col < TILE_SIZE; ++col)
 			{
-				atlas[row * ATLAS_SIZE + col] = 255;
+				atlas[row * ATLAS_SIZE + col] = 1.0f;
 			}
 		}
 	}
@@ -59,7 +59,7 @@ namespace SvgRenderer {
 					+ y * ATLAS_SIZE
 					+ col * TILE_SIZE
 					+ x;
-				atlas[index] = data[y * TILE_SIZE + x];
+				atlas[index] = data[y * TILE_SIZE + x] / 255.0f;
 			}
 		}
 	}

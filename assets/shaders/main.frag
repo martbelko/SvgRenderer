@@ -1,6 +1,6 @@
 #version 450
 
-layout(binding = 0) uniform sampler2D tex;
+layout (binding = 0) uniform sampler2D tex;
 
 in vec2 v_uv;
 in vec4 v_col;

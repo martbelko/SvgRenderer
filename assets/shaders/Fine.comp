@@ -1,0 +1,422 @@
+#version 460 core
+
+#define WG_SIZE 1
+
+layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+#define TILE_SIZE 16
+#define ATLAS_SIZE 4096 * 2
+
+#define MOVE_TO 0
+#define LINE_TO 1
+#define QUAD_TO 2
+#define CUBIC_TO 3
+
+#define GET_CMD_PATH_INDEX(value) (value >> 16)
+#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
+
+struct BoundingBox
+{
+	vec4 minmax;
+};
+
+struct Path
+{
+	uint startCmdIndex;
+	uint endCmdIndex;
+	uint startTileIndex;
+	uint endTileIndex;
+	mat4 transform;
+	BoundingBox bbox;
+	uint color;
+	uint startVisibleTileIndex;
+	uint startSpanQuadIndex;
+	uint startTileQuadIndex;
+	bool isBboxVisible;
+	uint _pad0;
+	uint _pad1;
+	uint _pad2;
+};
+
+struct Command
+{
+	uint pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
+	uint startIndexSimpleCommands;
+	uint endIndexSimpleCommands;
+	uint _pad0;
+	vec2 points[4]; // Maybe unused, but maximum 3 points for cubicTo
+	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
+};
+
+struct SimpleCommand // Lines or moves only
+{
+	uint type;
+	vec2 point;
+};
+
+struct Increment
+{
+	int area;
+	int height;
+};
+
+struct Tile
+{
+	int winding;
+	uint nextTileIndex;
+	bool hasIncrements;
+	Increment[TILE_SIZE * TILE_SIZE] increments;
+};
+
+struct Vertex
+{
+	int pos[2];
+	uint uv[2];
+	uint color;
+};
+
+layout(std430, binding = 0) buffer Paths
+{
+	Path paths[];
+};
+
+layout(std430, binding = 1) buffer Commands
+{
+	Command commands[];
+};
+
+layout(std430, binding = 2) buffer SimpleCommands
+{
+	SimpleCommand simpleCommands[];
+};
+
+layout(std430, binding = 3) buffer Atomics
+{
+	uint atomic;
+};
+
+layout(std430, binding = 4) buffer Tiles
+{
+	Tile tiles[];
+};
+
+layout(std430, binding = 5) buffer Vertices
+{
+	Vertex vertices[];
+};
+
+layout(std430, binding = 6) buffer Atlas
+{
+	float atlas[];
+};
+
+vec2 GetPreviousPoint(uint pathIndex, uint cmdIndex)
+{
+	Path path = paths[pathIndex];
+	if (cmdIndex == path.startCmdIndex)
+	{
+		return vec2(0, 0);
+	}
+
+	Command cmd = commands[cmdIndex - 1];
+	uint pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+	switch (pathType)
+	{
+	case MOVE_TO:
+	case LINE_TO:
+		return cmd.transformedPoints[0];
+	case QUAD_TO:
+		return cmd.transformedPoints[1];
+	case CUBIC_TO:
+		return cmd.transformedPoints[2];
+	}
+}
+
+bool IsPointInsideViewSpace(in vec2 v)
+{
+	// TODO: Set for width and height of the window
+	const float padding = 1.0;
+	return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
+}
+
+const int INSIDE = 0;
+const int LEFT = 1;
+const int RIGHT = 2;
+const int BOTTOM = 4;
+const int TOP = 8;
+
+int ComputeOutCode(in vec2 p)
+{
+	int code = INSIDE;
+
+	if (p.x < 0.0f)
+		code |= LEFT;
+	else if (p.x > 1900.0)
+		code |= RIGHT;
+	if (p.y < 0.0f)
+		code |= BOTTOM;
+	else if (p.y > 1000.0)
+		code |= TOP;
+
+	return code;
+}
+
+bool IsLineInsideViewSpace(vec2 p0, vec2 p1)
+{
+	int outcode0 = ComputeOutCode(p0);
+	int outcode1 = ComputeOutCode(p1);
+	bool accept = false;
+
+	while (true)
+	{
+		if (!bool(outcode0 | outcode1))
+		{
+			accept = true;
+			break;
+		}
+		else if (bool(outcode0 & outcode1))
+		{
+			break;
+		}
+		else
+		{
+			float x, y;
+			int outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
+			if (bool(outcodeOut & TOP))
+			{
+				x = p0.x + (p1.x - p0.x) * (1000 - p0.y) / (p1.y - p0.y);
+				y = 1000;
+			}
+			else if (bool(outcodeOut & BOTTOM))
+			{
+				x = p0.x + (p1.x - p0.x) * (-p0.y) / (p1.y - p0.y);
+				y = 0;
+			}
+			else if (bool(outcodeOut & RIGHT))
+			{
+				y = p0.y + (p1.y - p0.y) * (1900 - p0.x) / (p1.x - p0.x);
+				x = 1900;
+			}
+			else if (bool(outcodeOut & LEFT))
+			{
+				y = p0.y + (p1.y - p0.y) * (-p0.x) / (p1.x - p0.x);
+				x = 0;
+			}
+
+			if (outcodeOut == outcode0)
+			{
+				p0.x = x;
+				p0.y = y;
+				outcode0 = ComputeOutCode(p0);
+			}
+			else
+			{
+				p1.x = x;
+				p1.y = y;
+				outcode1 = ComputeOutCode(p1);
+			}
+		}
+	}
+
+	return accept;
+}
+
+bool IsBboxInsideViewSpace(in BoundingBox bbox)
+{
+	vec2 p1 = vec2(bbox.minmax.x, bbox.minmax.w);
+	vec2 p2 = vec2(bbox.minmax.z, bbox.minmax.y);
+	return IsLineInsideViewSpace(bbox.minmax.xy, bbox.minmax.zw) || IsLineInsideViewSpace(p1, p2);
+}
+
+uint pathIndex;
+int m_TileStartX;
+int m_TileStartY;
+uint m_TileCountX;
+uint m_TileCountY;
+
+uint GetTileIndexFromRelativePos(int x, int y)
+{
+	return y * m_TileCountX + x;
+}
+
+uint GetTileIndexFromWindowPos(int x, int y)
+{
+	int offsetX = int(floor(float(x) / TILE_SIZE)) - m_TileStartX;
+	int offsetY = int(floor(float(y) / TILE_SIZE)) - m_TileStartY;
+	return offsetY * m_TileCountX + offsetX;
+}
+
+uint GetTileCoordX(int windowPosX)
+{
+	return int(floor(float(windowPosX) / TILE_SIZE)) - m_TileStartX;
+}
+
+uint GetTileCoordY(int windowPosY)
+{
+	return int(floor(float(windowPosY) / TILE_SIZE)) - m_TileStartY;
+}
+
+int GetTileXFromAbsoluteIndex(uint absIndex)
+{
+	uint offset = absIndex % m_TileCountX;
+	return int(m_TileStartX + offset);
+}
+
+int GetTileYFromAbsoluteIndex(uint absIndex)
+{
+	uint offset = absIndex / m_TileCountX;
+	return int(m_TileStartY + offset);
+}
+
+Tile GetTileFromRelativePos(int x, int y)
+{
+	return tiles[paths[pathIndex].startTileIndex + GetTileIndexFromRelativePos(x, y)];
+}
+
+const uint MAX_UINT = 4294967295;
+const float MAX_FLOAT = 3.40282347e+38F;
+
+void PerformTile(int x, int y, in const uint data[TILE_SIZE * TILE_SIZE], uint tileOffset, uint quadIndex, const uint color)
+{
+	uint base = quadIndex * 4;
+
+	tileOffset += 1;
+	uint col = tileOffset % (ATLAS_SIZE / TILE_SIZE);
+	uint row = tileOffset / (ATLAS_SIZE / TILE_SIZE);
+	uint u1 = col * TILE_SIZE;
+	uint u2 = (col + 1) * TILE_SIZE;
+	uint v1 = row * TILE_SIZE;
+	uint v2 = (row + 1) * TILE_SIZE;
+
+	int xOffset = int(floor(x + TILE_SIZE));
+	int yOffset = int(floor(y + TILE_SIZE));
+
+	vertices[base + 0] = Vertex(int[2](x, y), uint[2](u1, v1), color);
+	vertices[base + 1] = Vertex(int[2](xOffset, y), uint[2](u2, v1), color);
+	vertices[base + 2] = Vertex(int[2](xOffset, yOffset), uint[2](u2, v2), color);
+	vertices[base + 3] = Vertex(int[2](x, yOffset), uint[2](u1, v2), color);
+
+	for (uint y = 0; y < TILE_SIZE; y++)
+	{
+		for (uint x = 0; x < TILE_SIZE; x++)
+		{
+			uint index = row * TILE_SIZE * ATLAS_SIZE
+				+ y * ATLAS_SIZE
+				+ col * TILE_SIZE
+				+ x;
+			atlas[index] = data[y * TILE_SIZE + x] / 255.0;
+		}
+	}
+}
+
+void Fine(in Path path)
+{
+	float areas[TILE_SIZE * TILE_SIZE];
+	float heights[TILE_SIZE * TILE_SIZE];
+	float coverage[TILE_SIZE];
+
+	for (uint j = 0; j < TILE_SIZE * TILE_SIZE; j++)
+	{
+		areas[j] = 0.0;
+		heights[j] = 0.0;
+	}
+
+	for (uint j = 0; j < TILE_SIZE; j++)
+	{
+		coverage[j] = 0.0;
+	}
+
+	uint tileCount = path.endTileIndex - path.startTileIndex + 1;
+	uint quadIndex = path.startTileQuadIndex;
+	uint tileIndex = path.startVisibleTileIndex;
+
+	for (uint i = 0; i < tileCount; i++)
+	{
+		const Tile tile = tiles[i + path.startTileIndex];
+		if (!tile.hasIncrements)
+		{
+			continue;
+		}
+
+		for (int y = 0; y < TILE_SIZE; y++)
+		{
+			for (int x = 0; x < TILE_SIZE; x++)
+			{
+				const Increment increment = tile.increments[y * TILE_SIZE + x];
+				// Loop over each increment inside the tile
+				areas[y * TILE_SIZE + x] = increment.area / 1000.0f; // Just simple increment for area
+				heights[y * TILE_SIZE + x] = increment.height / 1000.0f; // Just simple increment for height
+			}
+		}
+
+		uint tileData[TILE_SIZE * TILE_SIZE];
+
+		// For each y-coord in the tile
+		for (uint y = 0; y < TILE_SIZE; y++)
+		{
+			float accum = coverage[y];
+
+			// For each x-coord in the tile
+			for (uint x = 0; x < TILE_SIZE; x++)
+			{
+				tileData[y * TILE_SIZE + x] = uint(min(abs(accum + areas[y * TILE_SIZE + x]) * 256.0, 255.0));
+				accum += heights[y * TILE_SIZE + x];
+			}
+
+			coverage[y] = accum;
+		}
+
+		int tileX = GetTileXFromAbsoluteIndex(i);
+		int tileY = GetTileYFromAbsoluteIndex(i);
+		if (tileX >= 0 && tileY >= 0 && tileX <= ceil(float(1900.0) / TILE_SIZE) && tileY <= ceil(float(1000.0) / TILE_SIZE))
+		{
+			PerformTile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData, tileIndex++, quadIndex++, paths[pathIndex].color);
+		}
+
+		for (uint j = 0; j < TILE_SIZE * TILE_SIZE; j++)
+		{
+			areas[j] = 0.0;
+			heights[j] = 0.0;
+		}
+
+		// Next active tile in the same y-coord, same as the previous one, could be optimized and only done once
+		if (tile.nextTileIndex == MAX_UINT)
+		{
+			Tile tile = tiles[tile.nextTileIndex];
+			for (uint j = 0; j < TILE_SIZE; j++)
+			{
+				coverage[j] = 0.0;
+			}
+		}
+	}
+}
+
+void main()
+{
+	pathIndex = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+	if (pathIndex < paths.length())
+	{
+		Path path = paths[pathIndex];
+		if (!IsBboxInsideViewSpace(path.bbox))
+		{
+			return;
+		}
+
+		const int minBboxCoordX = int(floor(path.bbox.minmax.x));
+		const int minBboxCoordY = int(floor(path.bbox.minmax.y));
+		const int maxBboxCoordX = int(ceil(path.bbox.minmax.z));
+		const int maxBboxCoordY = int(ceil(path.bbox.minmax.w));
+
+		const int minTileCoordX = int(floor(float(minBboxCoordX) / TILE_SIZE));
+		const int minTileCoordY = int(floor(float(minBboxCoordY) / TILE_SIZE));
+		const int maxTileCoordX = int(ceil(float(maxBboxCoordX) / TILE_SIZE));
+		const int maxTileCoordY = int(ceil(float(maxBboxCoordY) / TILE_SIZE));
+
+		m_TileStartX = minTileCoordX;
+		m_TileStartY = minTileCoordY;
+		m_TileCountX = maxTileCoordX - minTileCoordX + 1;
+		m_TileCountY = maxTileCoordY - minTileCoordY + 1;
+
+		Fine(path);
+	}
+}

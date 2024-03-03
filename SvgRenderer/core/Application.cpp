@@ -508,13 +508,14 @@ namespace SvgRenderer {
 		}
 
 #if ASYNC == 2
-		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf, verticesBuf;
+		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf, verticesBuf, atlasBuf;
 		glCreateBuffers(1, &cmdBuf);
 		glCreateBuffers(1, &pathBuf);
 		glCreateBuffers(1, &simpleCmdBuf);
 		glCreateBuffers(1, &atomicBuf);
 		glCreateBuffers(1, &tilesBuf);
 		glCreateBuffers(1, &verticesBuf);
+		glCreateBuffers(1, &atlasBuf);
 
 		GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
 		glNamedBufferStorage(cmdBuf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
@@ -522,6 +523,7 @@ namespace SvgRenderer {
 		glNamedBufferStorage(simpleCmdBuf, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data(), bufferFlags);
 		glNamedBufferStorage(tilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
 		glNamedBufferStorage(verticesBuf, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
+		glNamedBufferStorage(atlasBuf, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
 
 		uint32_t atomCounter = 0;
 		glNamedBufferStorage(atomicBuf, sizeof(uint32_t), &atomCounter, bufferFlags);
@@ -532,6 +534,7 @@ namespace SvgRenderer {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, atomicBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, tilesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, verticesBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, atlasBuf);
 
 		Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
 		Ref<Shader> shader2 = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test1.comp");
@@ -541,6 +544,7 @@ namespace SvgRenderer {
 		Ref<Shader> shaderCalculateQuads = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CalculateQuads.comp");
 		Ref<Shader> shaderPrefixSum = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PrefixSum.comp");
 		Ref<Shader> shaderCoarse = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Coarse.comp");
+		Ref<Shader> shaderFine = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Fine.comp");
 
 		SR_INFO("Running in GPU mode\n");
 #elif ASYNC == 1
@@ -875,24 +879,6 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Coarse: {0} ms", timerCoarse.ElapsedMillis());
-
-			Timer gpuToCpuTimer;
-
-			glGetNamedBufferSubData(cmdBuf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
-			glGetNamedBufferSubData(pathBuf, 0, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data());
-			glGetNamedBufferSubData(simpleCmdBuf, 0, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data());
-			glGetNamedBufferSubData(atomicBuf, 0, sizeof(uint32_t), &atomCounter);
-			glGetNamedBufferSubData(tilesBuf, 0, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data());
-			glGetNamedBufferSubData(verticesBuf, 0, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data());
-
-			glDeleteBuffers(1, &cmdBuf);
-			glDeleteBuffers(1, &pathBuf);
-			glDeleteBuffers(1, &simpleCmdBuf);
-			glDeleteBuffers(1, &atomicBuf);
-			glDeleteBuffers(1, &tilesBuf);
-			glDeleteBuffers(1, &verticesBuf);
-
-			SR_WARN("GPU -> CPU: {0} ms", gpuToCpuTimer.ElapsedMillis());
 		}
 #else
 		// 4.5: Coarse
@@ -903,6 +889,61 @@ namespace SvgRenderer {
 
 			Timer timerCoarse;
 			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
+				{
+					const PathRender& path = Globals::AllPaths.paths[pathIndex];
+					if (!Flattening::IsBboxInsideViewSpace(path.bbox))
+					{
+						return;
+					}
+
+					Rasterizer rast(path.bbox, pathIndex);
+					rast.Coarse(m_TileBuilder);
+				});
+			SR_TRACE("Coarse: {0}", timerCoarse.ElapsedMillis());
+		}
+#endif
+		// 4.6: Fine
+#if ASYNC == 2
+		{
+			Timer timerFine;
+			shaderFine->Bind();
+			{
+				uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.paths.size() / 65535.0f), 1.0f);
+				shaderFine->Dispatch(65535, ySize, 1);
+			}
+
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Fine: {0} ms", timerFine.ElapsedMillis());
+
+			Timer gpuToCpuTimer;
+
+			glGetNamedBufferSubData(cmdBuf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
+			glGetNamedBufferSubData(pathBuf, 0, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data());
+			glGetNamedBufferSubData(simpleCmdBuf, 0, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data());
+			glGetNamedBufferSubData(atomicBuf, 0, sizeof(uint32_t), &atomCounter);
+			glGetNamedBufferSubData(tilesBuf, 0, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data());
+			glGetNamedBufferSubData(verticesBuf, 0, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data());
+			glGetNamedBufferSubData(atlasBuf, 0, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data());
+
+			glDeleteBuffers(1, &cmdBuf);
+			glDeleteBuffers(1, &pathBuf);
+			glDeleteBuffers(1, &simpleCmdBuf);
+			glDeleteBuffers(1, &atomicBuf);
+			glDeleteBuffers(1, &tilesBuf);
+			glDeleteBuffers(1, &verticesBuf);
+			glDeleteBuffers(1, &atlasBuf);
+
+			SR_WARN("GPU -> CPU: {0} ms", gpuToCpuTimer.ElapsedMillis());
+		}
+#else
+		{
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.paths.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
+			Timer timerFine;
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
 				if (!Flattening::IsBboxInsideViewSpace(path.bbox))
@@ -911,29 +952,11 @@ namespace SvgRenderer {
 				}
 
 				Rasterizer rast(path.bbox, pathIndex);
-				rast.Coarse(m_TileBuilder);
+				rast.Finish(m_TileBuilder);
 			});
-			SR_TRACE("Coarse: {0}", timerCoarse.ElapsedMillis());
+			SR_TRACE("Fine: {0}", timerFine.ElapsedMillis());
 		}
 #endif
-		// 4.6: Fine
-		std::vector<uint32_t> indices;
-		indices.resize(Globals::AllPaths.paths.size());
-		std::iota(indices.begin(), indices.end(), 0);
-
-		Timer timerFine;
-		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
-		{
-			const PathRender& path = Globals::AllPaths.paths[pathIndex];
-			if (!Flattening::IsBboxInsideViewSpace(path.bbox))
-			{
-				return;
-			}
-
-			Rasterizer rast(path.bbox, pathIndex);
-			rast.Finish(m_TileBuilder);
-		});
-		SR_TRACE("Fine: {0}", timerFine.ElapsedMillis());
 
 		SR_INFO("Total execution time: {0} ms", globalTimer.ElapsedMillis());
 	}
@@ -962,12 +985,12 @@ namespace SvgRenderer {
 		glTexImage2D(
 			GL_TEXTURE_2D,
 			0,
-			GL_R8,
+			GL_R32F,
 			ATLAS_SIZE,
 			ATLAS_SIZE,
 			0,
 			GL_RED,
-			GL_UNSIGNED_BYTE,
+			GL_FLOAT,
 			m_TileBuilder.atlas.data()
 		);
 
