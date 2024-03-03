@@ -72,8 +72,8 @@ namespace SvgRenderer {
 
 	struct Increment
 	{
-		float area = 0;
-		float height = 0;
+		int32_t area = 0;
+		int32_t height = 0;
 	};
 
 	constexpr float TOLERANCE = 0.05f; // Quality of flattening
