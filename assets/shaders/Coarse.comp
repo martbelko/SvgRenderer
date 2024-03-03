@@ -1,0 +1,345 @@
+#version 460 core
+
+#define WG_SIZE 1
+
+layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+#define TILE_SIZE 16
+
+#define MOVE_TO 0
+#define LINE_TO 1
+#define QUAD_TO 2
+#define CUBIC_TO 3
+
+#define GET_CMD_PATH_INDEX(value) (value >> 16)
+#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
+
+struct BoundingBox
+{
+	vec4 minmax;
+};
+
+struct Path
+{
+	uint startCmdIndex;
+	uint endCmdIndex;
+	uint startTileIndex;
+	uint endTileIndex;
+	mat4 transform;
+	BoundingBox bbox;
+	uint color;
+	uint startVisibleTileIndex;
+	uint startSpanQuadIndex;
+	uint startTileQuadIndex;
+	bool isBboxVisible;
+	uint _pad0;
+	uint _pad1;
+	uint _pad2;
+};
+
+struct Command
+{
+	uint pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
+	uint startIndexSimpleCommands;
+	uint endIndexSimpleCommands;
+	uint _pad0;
+	vec2 points[4]; // Maybe unused, but maximum 3 points for cubicTo
+	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
+};
+
+struct SimpleCommand // Lines or moves only
+{
+	uint type;
+	vec2 point;
+};
+
+struct Increment
+{
+	int area;
+	int height;
+};
+
+struct Tile
+{
+	int winding;
+	uint nextTileIndex;
+	bool hasIncrements;
+	Increment[TILE_SIZE * TILE_SIZE] increments;
+};
+
+struct Vertex
+{
+	int pos[2];
+	uint uv[2];
+	uint color;
+};
+
+layout(std430, binding = 0) buffer Paths
+{
+	Path paths[];
+};
+
+layout(std430, binding = 1) buffer Commands
+{
+	Command commands[];
+};
+
+layout(std430, binding = 2) buffer SimpleCommands
+{
+	SimpleCommand simpleCommands[];
+};
+
+layout(std430, binding = 3) buffer Atomics
+{
+	uint atomic;
+};
+
+layout(std430, binding = 4) buffer Tiles
+{
+	Tile tiles[];
+};
+
+layout(std430, binding = 5) buffer Vertices
+{
+	Vertex vertices[];
+};
+
+vec2 GetPreviousPoint(uint pathIndex, uint cmdIndex)
+{
+	Path path = paths[pathIndex];
+	if (cmdIndex == path.startCmdIndex)
+	{
+		return vec2(0, 0);
+	}
+
+	Command cmd = commands[cmdIndex - 1];
+	uint pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+	switch (pathType)
+	{
+	case MOVE_TO:
+	case LINE_TO:
+		return cmd.transformedPoints[0];
+	case QUAD_TO:
+		return cmd.transformedPoints[1];
+	case CUBIC_TO:
+		return cmd.transformedPoints[2];
+	}
+}
+
+bool IsPointInsideViewSpace(in vec2 v)
+{
+	// TODO: Set for width and height of the window
+	const float padding = 1.0;
+	return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
+}
+
+const int INSIDE = 0;
+const int LEFT = 1;
+const int RIGHT = 2;
+const int BOTTOM = 4;
+const int TOP = 8;
+
+int ComputeOutCode(in vec2 p)
+{
+	int code = INSIDE;
+
+	if (p.x < 0.0f)
+		code |= LEFT;
+	else if (p.x > 1900.0)
+		code |= RIGHT;
+	if (p.y < 0.0f)
+		code |= BOTTOM;
+	else if (p.y > 1000.0)
+		code |= TOP;
+
+	return code;
+}
+
+bool IsLineInsideViewSpace(vec2 p0, vec2 p1)
+{
+	int outcode0 = ComputeOutCode(p0);
+	int outcode1 = ComputeOutCode(p1);
+	bool accept = false;
+
+	while (true)
+	{
+		if (!bool(outcode0 | outcode1))
+		{
+			accept = true;
+			break;
+		}
+		else if (bool(outcode0 & outcode1))
+		{
+			break;
+		}
+		else
+		{
+			float x, y;
+			int outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
+			if (bool(outcodeOut & TOP))
+			{
+				x = p0.x + (p1.x - p0.x) * (1000 - p0.y) / (p1.y - p0.y);
+				y = 1000;
+			}
+			else if (bool(outcodeOut & BOTTOM))
+			{
+				x = p0.x + (p1.x - p0.x) * (-p0.y) / (p1.y - p0.y);
+				y = 0;
+			}
+			else if (bool(outcodeOut & RIGHT))
+			{
+				y = p0.y + (p1.y - p0.y) * (1900 - p0.x) / (p1.x - p0.x);
+				x = 1900;
+			}
+			else if (bool(outcodeOut & LEFT))
+			{
+				y = p0.y + (p1.y - p0.y) * (-p0.x) / (p1.x - p0.x);
+				x = 0;
+			}
+
+			if (outcodeOut == outcode0)
+			{
+				p0.x = x;
+				p0.y = y;
+				outcode0 = ComputeOutCode(p0);
+			}
+			else
+			{
+				p1.x = x;
+				p1.y = y;
+				outcode1 = ComputeOutCode(p1);
+			}
+		}
+	}
+
+	return accept;
+}
+
+bool IsBboxInsideViewSpace(in BoundingBox bbox)
+{
+	vec2 p1 = vec2(bbox.minmax.x, bbox.minmax.w);
+	vec2 p2 = vec2(bbox.minmax.z, bbox.minmax.y);
+	return IsLineInsideViewSpace(bbox.minmax.xy, bbox.minmax.zw) || IsLineInsideViewSpace(p1, p2);
+}
+
+uint pathIndex;
+int m_TileStartX;
+int m_TileStartY;
+uint m_TileCountX;
+uint m_TileCountY;
+
+uint GetTileIndexFromRelativePos(int x, int y)
+{
+	return y * m_TileCountX + x;
+}
+
+uint GetTileIndexFromWindowPos(int x, int y)
+{
+	int offsetX = int(floor(float(x) / TILE_SIZE)) - m_TileStartX;
+	int offsetY = int(floor(float(y) / TILE_SIZE)) - m_TileStartY;
+	return offsetY * m_TileCountX + offsetX;
+}
+
+uint GetTileCoordX(int windowPosX)
+{
+	return int(floor(float(windowPosX) / TILE_SIZE)) - m_TileStartX;
+}
+
+uint GetTileCoordY(int windowPosY)
+{
+	return int(floor(float(windowPosY) / TILE_SIZE)) - m_TileStartY;
+}
+
+int GetTileXFromAbsoluteIndex(uint absIndex)
+{
+	uint offset = absIndex % m_TileCountX;
+	return int(m_TileStartX + offset);
+}
+
+int GetTileYFromAbsoluteIndex(uint absIndex)
+{
+	uint offset = absIndex / m_TileCountX;
+	return int(m_TileStartY + offset);
+}
+
+Tile GetTileFromRelativePos(int x, int y)
+{
+	return tiles[paths[pathIndex].startTileIndex + GetTileIndexFromRelativePos(x, y)];
+}
+
+const uint MAX_UINT = 4294967295;
+const float MAX_FLOAT = 3.40282347e+38F;
+
+void Span(int x, int y, uint width, uint quadIndex, uint color)
+{
+	uint base = quadIndex * 4;
+
+	int xWidth = int(floor(x + width));
+	int yShift = int(floor(y + TILE_SIZE));
+
+	vertices[base + 0] = Vertex(int[2](x, y), uint[2](0, 0), color);
+	vertices[base + 1] = Vertex(int[2](xWidth, y), uint[2](0, 0), color);
+	vertices[base + 2] = Vertex(int[2](xWidth, yShift), uint[2](0, 0), color);
+	vertices[base + 3] = Vertex(int[2](x, yShift), uint[2](0, 0), color);
+}
+
+void Coarse(in Path path)
+{
+	uint tileCount = path.endTileIndex - path.startTileIndex + 1;
+	uint quadIndex = path.startSpanQuadIndex;
+
+	for (uint i = 0; i < tileCount; i++)
+	{
+		Tile tile = tiles[i + path.startTileIndex];
+		if (!tile.hasIncrements)
+		{
+			continue;
+		}
+
+		if (tile.nextTileIndex != MAX_UINT)
+		{
+			Tile nextTile = tiles[tile.nextTileIndex];
+			const int tileX = GetTileXFromAbsoluteIndex(i);
+			const int tileY = GetTileYFromAbsoluteIndex(i);
+			int nextTileX = GetTileXFromAbsoluteIndex(tile.nextTileIndex - path.startTileIndex);
+			int width = nextTileX - tileX - 1;
+
+			// If the winding is nonzero, span the whole tile
+			if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= ceil(float(1000.0) / TILE_SIZE)
+				&& GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
+			{
+				Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE, quadIndex++, paths[pathIndex].color);
+			}
+		}
+	}
+}
+
+void main()
+{
+	pathIndex = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+	if (pathIndex < paths.length())
+	{
+		Path path = paths[pathIndex];
+		if (!IsBboxInsideViewSpace(path.bbox))
+		{
+			return;
+		}
+
+		const int minBboxCoordX = int(floor(path.bbox.minmax.x));
+		const int minBboxCoordY = int(floor(path.bbox.minmax.y));
+		const int maxBboxCoordX = int(ceil(path.bbox.minmax.z));
+		const int maxBboxCoordY = int(ceil(path.bbox.minmax.w));
+
+		const int minTileCoordX = int(floor(float(minBboxCoordX) / TILE_SIZE));
+		const int minTileCoordY = int(floor(float(minBboxCoordY) / TILE_SIZE));
+		const int maxTileCoordX = int(ceil(float(maxBboxCoordX) / TILE_SIZE));
+		const int maxTileCoordY = int(ceil(float(maxBboxCoordY) / TILE_SIZE));
+
+		m_TileStartX = minTileCoordX;
+		m_TileStartY = minTileCoordY;
+		m_TileCountX = maxTileCoordX - minTileCoordX + 1;
+		m_TileCountY = maxTileCoordY - minTileCoordY + 1;
+
+		Coarse(path);
+	}
+}
