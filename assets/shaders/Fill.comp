@@ -220,8 +220,8 @@ vec2 GetSimpleCmdPrevPoint(uint simpleCmdIndex, in vec2 lastPoint, in Command cm
 
 int m_TileStartX;
 int m_TileStartY;
-int m_TileCountX;
-int m_TileCountY;
+uint m_TileCountX;
+uint m_TileCountY;
 
 uint GetTileIndexFromRelativePos(int x, int y)
 {

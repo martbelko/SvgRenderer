@@ -126,8 +126,8 @@ namespace SvgRenderer {
 				// Reset coordinates if a scanline is completed
 				if (rowt0 == 1.0f || colt0 == 1.0f)
 				{
-					x = point.x;
-					y = point.y;
+					x = glm::floor(point.x);
+					y = glm::floor(point.y);
 				}
 
 				// Handle tile boundaries
@@ -239,9 +239,8 @@ namespace SvgRenderer {
 		const PathRender& path = Globals::AllPaths.paths[pathIndex];
 		uint32_t tileCount = path.endTileIndex - path.startTileIndex + 1;
 
-		uint32_t coarseQuadCount = 0;
-
 		// Coarse
+		uint32_t coarseQuadCount = 0;
 		for (uint32_t i = 0; i < tileCount; i++)
 		{
 			Tile& tile = Globals::Tiles.tiles[i + path.startTileIndex];
@@ -271,7 +270,7 @@ namespace SvgRenderer {
 				int32_t nextTileX = GetTileXFromAbsoluteIndex(tile.nextTileIndex - path.startTileIndex);
 				int32_t width = nextTileX - tileX - 1;
 				// If the winding is nonzero, span the whole tile
-				if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= glm::ceil(SCREEN_HEIGHT / TILE_SIZE)
+				if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= glm::ceil(float(SCREEN_HEIGHT) / TILE_SIZE)
 				    && GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
 				{
 					coarseQuadCount++;
@@ -291,7 +290,7 @@ namespace SvgRenderer {
 
 			int32_t tileX = GetTileXFromAbsoluteIndex(i);
 			int32_t tileY = GetTileYFromAbsoluteIndex(i);
-			if (tileX >= 0 && tileY >= 0 && tileX <= (SCREEN_WIDTH / TILE_SIZE) && tileY <= glm::ceil(SCREEN_HEIGHT / TILE_SIZE))
+			if (tileX >= 0 && tileY >= 0 && tileX <= glm::ceil(float(SCREEN_WIDTH) / TILE_SIZE) && tileY <= glm::ceil(float(SCREEN_HEIGHT) / TILE_SIZE))
 			{
 				fineQuadCount++;
 			}
@@ -322,7 +321,7 @@ namespace SvgRenderer {
 				int32_t nextTileX = GetTileXFromAbsoluteIndex(tile.nextTileIndex - path.startTileIndex);
 				int32_t width = nextTileX - tileX - 1;
 				// If the winding is nonzero, span the whole tile
-				if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= glm::ceil(SCREEN_HEIGHT / TILE_SIZE)
+				if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= glm::ceil(float(SCREEN_HEIGHT) / TILE_SIZE)
 				    && GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
 				{
 					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE, quadIndex++, Globals::AllPaths.paths[pathIndex].color);
@@ -380,7 +379,7 @@ namespace SvgRenderer {
 
 			int32_t tileX = GetTileXFromAbsoluteIndex(i);
 			int32_t tileY = GetTileYFromAbsoluteIndex(i);
-			if (tileX >= 0 && tileY >= 0 && tileX <= (SCREEN_WIDTH / TILE_SIZE) && tileY <= glm::ceil(SCREEN_HEIGHT / TILE_SIZE))
+			if (tileX >= 0 && tileY >= 0 && tileX <= glm::ceil(float(SCREEN_WIDTH) / TILE_SIZE) && tileY <= glm::ceil(float(SCREEN_HEIGHT) / TILE_SIZE))
 			{
 				builder.Tile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData, tileIndex++, quadIndex++, Globals::AllPaths.paths[pathIndex].color);
 			}
