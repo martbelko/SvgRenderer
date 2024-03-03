@@ -482,7 +482,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -515,6 +515,7 @@ namespace SvgRenderer {
 		Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
 		Ref<Shader> shader2 = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test1.comp");
 		Ref<Shader> shaderFlatten = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Flatten.comp");
+		Ref<Shader> shaderPreFill = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFill.comp");
 
 		SR_INFO("Running in GPU mode\n");
 #elif ASYNC == 1
@@ -611,20 +612,6 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
-
-			Timer gpuToCpuTimer;
-
-			glGetNamedBufferSubData(cmdBuf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
-			glGetNamedBufferSubData(pathBuf, 0, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data());
-			glGetNamedBufferSubData(simpleCmdBuf, 0, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data());
-			glGetNamedBufferSubData(atomicBuf, 0, sizeof(uint32_t), &atomCounter);
-
-			glDeleteBuffers(1, &cmdBuf);
-			glDeleteBuffers(1, &pathBuf);
-			glDeleteBuffers(1, &simpleCmdBuf);
-			glDeleteBuffers(1, &atomicBuf);
-
-			SR_WARN("GPU -> CPU: {0} ms", gpuToCpuTimer.ElapsedMillis());
 		}
 #else
 		// 3.1: Flattening
@@ -685,10 +672,38 @@ namespace SvgRenderer {
 			SR_TRACE("Calculating BBOX: {0} ms", timerBbox.ElapsedMillis());
 		}
 #endif
-
 		// 4.step: The rest
+#if ASYNC == 2
 		{
-			// 4.1 Calculate correct tile indices for each path according to its bounding box
+			// 4.1: Calculate correct tile indices for each path according to its bounding box
+			Timer timerPreFill;
+			shaderPreFill->Bind();
+			{
+				uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.paths.size() / 65535.0f), 1.0f);
+				shaderPreFill->Dispatch(65535, ySize, 1);
+			}
+
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Pre fill: {0} ms", timerPreFill.ElapsedMillis());
+
+			Timer gpuToCpuTimer;
+
+			glGetNamedBufferSubData(cmdBuf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
+			glGetNamedBufferSubData(pathBuf, 0, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data());
+			glGetNamedBufferSubData(simpleCmdBuf, 0, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data());
+			glGetNamedBufferSubData(atomicBuf, 0, sizeof(uint32_t), &atomCounter);
+
+			glDeleteBuffers(1, &cmdBuf);
+			glDeleteBuffers(1, &pathBuf);
+			glDeleteBuffers(1, &simpleCmdBuf);
+			glDeleteBuffers(1, &atomicBuf);
+
+			SR_WARN("GPU -> CPU: {0} ms", gpuToCpuTimer.ElapsedMillis());
+		}
+#else
+		{
+			// 4.1: Calculate correct tile indices for each path according to its bounding box
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.paths.size());
 			std::iota(indices.begin(), indices.end(), 0);
@@ -727,8 +742,9 @@ namespace SvgRenderer {
 			});
 			SR_TRACE("Step 4.1: {0} ms", timer41.ElapsedMillis());
 		}
+#endif
 
-		// 4.2: ...TODO: Add desc
+		// 4.2: Filling
 		std::vector<uint32_t> indices;
 		indices.resize(Globals::AllPaths.paths.size());
 		std::iota(indices.begin(), indices.end(), 0);
