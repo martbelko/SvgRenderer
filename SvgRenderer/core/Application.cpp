@@ -482,7 +482,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -508,18 +508,20 @@ namespace SvgRenderer {
 		}
 
 #if ASYNC == 2
-		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf;
+		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf, verticesBuf;
 		glCreateBuffers(1, &cmdBuf);
 		glCreateBuffers(1, &pathBuf);
 		glCreateBuffers(1, &simpleCmdBuf);
 		glCreateBuffers(1, &atomicBuf);
 		glCreateBuffers(1, &tilesBuf);
+		glCreateBuffers(1, &verticesBuf);
 
 		GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
 		glNamedBufferStorage(cmdBuf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
 		glNamedBufferStorage(pathBuf, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
 		glNamedBufferStorage(simpleCmdBuf, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data(), bufferFlags);
 		glNamedBufferStorage(tilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
+		glNamedBufferStorage(tilesBuf, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
 
 		uint32_t atomCounter = 0;
 		glNamedBufferStorage(atomicBuf, sizeof(uint32_t), &atomCounter, bufferFlags);
@@ -529,6 +531,7 @@ namespace SvgRenderer {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, simpleCmdBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, atomicBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, tilesBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, verticesBuf);
 
 		Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
 		Ref<Shader> shader2 = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test1.comp");
@@ -536,6 +539,7 @@ namespace SvgRenderer {
 		Ref<Shader> shaderPreFill = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFill.comp");
 		Ref<Shader> shaderFill = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Fill.comp");
 		Ref<Shader> shaderCalculateQuads = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CalculateQuads.comp");
+		Ref<Shader> shaderPrefixSum = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PrefixSum.comp");
 
 		SR_INFO("Running in GPU mode\n");
 #elif ASYNC == 1
@@ -796,22 +800,6 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Calculating quad counts: {0} ms", timerCalcQuads.ElapsedMillis());
-
-			Timer gpuToCpuTimer;
-
-			glGetNamedBufferSubData(cmdBuf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
-			glGetNamedBufferSubData(pathBuf, 0, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data());
-			glGetNamedBufferSubData(simpleCmdBuf, 0, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data());
-			glGetNamedBufferSubData(atomicBuf, 0, sizeof(uint32_t), &atomCounter);
-			glGetNamedBufferSubData(tilesBuf, 0, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data());
-
-			glDeleteBuffers(1, &cmdBuf);
-			glDeleteBuffers(1, &pathBuf);
-			glDeleteBuffers(1, &simpleCmdBuf);
-			glDeleteBuffers(1, &atomicBuf);
-			glDeleteBuffers(1, &tilesBuf);
-
-			SR_WARN("GPU -> CPU: {0} ms", gpuToCpuTimer.ElapsedMillis());
 		}
 #else
 		{
@@ -838,8 +826,19 @@ namespace SvgRenderer {
 		}
 #endif
 		// 4.4: Calculate correct tile indices for each path
+#if ASYNC == 2
 		{
-			Timer timer44;
+			Timer timerPrefixSum;
+			shaderPrefixSum->Bind();
+			shaderPrefixSum->Dispatch(1, 1, 1);
+
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Prefix sum: {0} ms", timerPrefixSum.ElapsedMillis());
+		}
+#else
+		{
+			Timer timerPrefixSum;
 			uint32_t accumCount = 0;
 			uint32_t accumTileCount = 0;
 			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
@@ -861,29 +860,35 @@ namespace SvgRenderer {
 				path.startVisibleTileIndex = accumTileCount;
 				accumTileCount += fineQuadCount;
 			}
-			SR_TRACE("Step 4.4: {0}", timer44.ElapsedMillis());
+			SR_TRACE("Prefix sum: {0}", timerPrefixSum.ElapsedMillis());
+		}
+#endif
+		// 4.5: Coarse
+		{
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.paths.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
+			Timer timerCoarse;
+			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
+			{
+				const PathRender& path = Globals::AllPaths.paths[pathIndex];
+				if (!Flattening::IsBboxInsideViewSpace(path.bbox))
+				{
+					return;
+				}
+
+				Rasterizer rast(path.bbox, pathIndex);
+				rast.Coarse(m_TileBuilder);
+			});
+			SR_TRACE("Coarse: {0}", timerCoarse.ElapsedMillis());
 		}
 
+		// 4.6: Fine
 		std::vector<uint32_t> indices;
 		indices.resize(Globals::AllPaths.paths.size());
 		std::iota(indices.begin(), indices.end(), 0);
 
-		// 4.5: Coarse
-		Timer timerCoarse;
-		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
-		{
-			const PathRender& path = Globals::AllPaths.paths[pathIndex];
-			if (!Flattening::IsBboxInsideViewSpace(path.bbox))
-			{
-				return;
-			}
-
-			Rasterizer rast(path.bbox, pathIndex);
-			rast.Coarse(m_TileBuilder);
-		});
-		SR_TRACE("Coarse: {0}", timerCoarse.ElapsedMillis());
-
-		// 4.6: Fine
 		Timer timerFine;
 		std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
 		{
