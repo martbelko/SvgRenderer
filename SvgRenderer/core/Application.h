@@ -49,7 +49,7 @@ namespace SvgRenderer {
 
 		TileBuilder m_TileBuilder;
 
-		uint32_t m_Vbo, m_Ibo, m_AlphaTexture;
+		uint32_t m_Vbo, m_Ibo, m_Vao, m_AlphaTexture;
 		Ref<Shader> m_FinalShader;
 	private:
 		static Application s_Instance;
