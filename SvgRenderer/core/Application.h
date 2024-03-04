@@ -48,6 +48,8 @@ namespace SvgRenderer {
 		Scope<Window> m_Window;
 
 		TileBuilder m_TileBuilder;
+
+		uint32_t m_Vbo, m_Ibo, m_AlphaTexture;
 	private:
 		static Application s_Instance;
 	};

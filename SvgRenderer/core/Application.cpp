@@ -482,7 +482,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/tigerr.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/Martin/Desktop/svgs/paris.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -508,13 +508,27 @@ namespace SvgRenderer {
 		}
 
 #if ASYNC == 2
-		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf, verticesBuf, atlasBuf;
+		glGenTextures(1, &m_AlphaTexture);
+		glBindTexture(GL_TEXTURE_2D, m_AlphaTexture);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32F, ATLAS_SIZE, ATLAS_SIZE);
+
+		float z = 0.0f;
+		glClearTexImage(m_AlphaTexture, 0, GL_RED, GL_FLOAT, &z);
+
+		z = 1.0f;
+		glClearTexSubImage(m_AlphaTexture, 0, 0, 0, 0, 1, 1, 0, GL_RED, GL_FLOAT, &z);
+
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf, atlasBuf;
 		glCreateBuffers(1, &cmdBuf);
 		glCreateBuffers(1, &pathBuf);
 		glCreateBuffers(1, &simpleCmdBuf);
 		glCreateBuffers(1, &atomicBuf);
 		glCreateBuffers(1, &tilesBuf);
-		glCreateBuffers(1, &verticesBuf);
+		glCreateBuffers(1, &m_Vbo);
 		glCreateBuffers(1, &atlasBuf);
 
 		GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
@@ -522,7 +536,7 @@ namespace SvgRenderer {
 		glNamedBufferStorage(pathBuf, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
 		glNamedBufferStorage(simpleCmdBuf, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data(), bufferFlags);
 		glNamedBufferStorage(tilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
-		glNamedBufferStorage(verticesBuf, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
+		glNamedBufferStorage(m_Vbo, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
 		glNamedBufferStorage(atlasBuf, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
 
 		uint32_t atomCounter = 0;
@@ -533,7 +547,7 @@ namespace SvgRenderer {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, simpleCmdBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, atomicBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, tilesBuf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, verticesBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_Vbo);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, atlasBuf);
 
 		Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
@@ -907,34 +921,15 @@ namespace SvgRenderer {
 		{
 			Timer timerFine;
 			shaderFine->Bind();
+			glBindImageTexture(0, m_AlphaTexture, 0, 0, 0, GL_WRITE_ONLY, GL_R32F);
 			{
 				uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.paths.size() / 65535.0f), 1.0f);
 				shaderFine->Dispatch(65535, ySize, 1);
 			}
 
-			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+			glMemoryBarrier(GL_ALL_BARRIER_BITS);
 
 			SR_TRACE("Fine: {0} ms", timerFine.ElapsedMillis());
-
-			Timer gpuToCpuTimer;
-
-			glGetNamedBufferSubData(cmdBuf, 0, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data());
-			glGetNamedBufferSubData(pathBuf, 0, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data());
-			glGetNamedBufferSubData(simpleCmdBuf, 0, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data());
-			glGetNamedBufferSubData(atomicBuf, 0, sizeof(uint32_t), &atomCounter);
-			glGetNamedBufferSubData(tilesBuf, 0, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data());
-			glGetNamedBufferSubData(verticesBuf, 0, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data());
-			glGetNamedBufferSubData(atlasBuf, 0, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data());
-
-			glDeleteBuffers(1, &cmdBuf);
-			glDeleteBuffers(1, &pathBuf);
-			glDeleteBuffers(1, &simpleCmdBuf);
-			glDeleteBuffers(1, &atomicBuf);
-			glDeleteBuffers(1, &tilesBuf);
-			glDeleteBuffers(1, &verticesBuf);
-			glDeleteBuffers(1, &atlasBuf);
-
-			SR_WARN("GPU -> CPU: {0} ms", gpuToCpuTimer.ElapsedMillis());
 		}
 #else
 		{
@@ -976,33 +971,12 @@ namespace SvgRenderer {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glEnable(GL_BLEND);
 
-		GLuint tex = 0;
-		glGenTextures(1, &tex);
-		glBindTexture(GL_TEXTURE_2D, tex);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-		glTexImage2D(
-			GL_TEXTURE_2D,
-			0,
-			GL_R32F,
-			ATLAS_SIZE,
-			ATLAS_SIZE,
-			0,
-			GL_RED,
-			GL_FLOAT,
-			m_TileBuilder.atlas.data()
-		);
-
-		GLuint vbo = 0;
 		GLuint ibo = 0;
 		GLuint vao = 0;
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);
 
-		glGenBuffers(1, &vbo);
-		glBindBuffer(GL_ARRAY_BUFFER, vbo);
-		glBufferData(GL_ARRAY_BUFFER, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), GL_STREAM_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, m_Vbo);
 
 		glGenBuffers(1, &ibo);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
@@ -1047,9 +1021,7 @@ namespace SvgRenderer {
 
 		glUniform2ui(0, SCREEN_WIDTH, SCREEN_HEIGHT);
 		glUniform2ui(1, ATLAS_SIZE, ATLAS_SIZE);
-		glBindTextureUnit(0, tex);
-
-		camera.SetPosition(glm::vec3(0, 0, 0.5f));
+		glBindTextureUnit(0, m_AlphaTexture);
 
 		m_Running = true;
 		while (m_Running)

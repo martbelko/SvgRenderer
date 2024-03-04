@@ -107,8 +107,10 @@ layout(std430, binding = 5) buffer Vertices
 
 layout(std430, binding = 6) buffer Atlas
 {
-	float atlas[];
+	float atlas[ATLAS_SIZE * ATLAS_SIZE];
 };
+
+layout(binding = 0) uniform writeonly image2D outputTexture;
 
 vec2 GetPreviousPoint(uint pathIndex, uint cmdIndex)
 {
@@ -149,11 +151,11 @@ int ComputeOutCode(in vec2 p)
 {
 	int code = INSIDE;
 
-	if (p.x < 0.0f)
+	if (p.x < 0.0)
 		code |= LEFT;
 	else if (p.x > 1900.0)
 		code |= RIGHT;
-	if (p.y < 0.0f)
+	if (p.y < 0.0)
 		code |= BOTTOM;
 	else if (p.y > 1000.0)
 		code |= TOP;
@@ -304,7 +306,14 @@ void PerformTile(int x, int y, in const uint data[TILE_SIZE * TILE_SIZE], uint t
 				+ y * ATLAS_SIZE
 				+ col * TILE_SIZE
 				+ x;
-			atlas[index] = data[y * TILE_SIZE + x] / 255.0;
+
+			uint uu1 = col * TILE_SIZE + x;
+			uint vv1 = row * TILE_SIZE + y;
+
+			ivec2 texCoord = ivec2(uu1, vv1);
+			float v = data[y * TILE_SIZE + x] / 255.0;
+			imageStore(outputTexture, texCoord, vec4(v, 0, 0, 0));
+			atlas[index] = v;
 		}
 	}
 }
