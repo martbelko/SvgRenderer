@@ -1002,6 +1002,8 @@ namespace SvgRenderer {
 		m_Running = true;
 		while (m_Running)
 		{
+			Timer timer;
+
 			glClearColor(1.0, 1.0, 1.0, 1.0);
 			glClear(GL_COLOR_BUFFER_BIT);
 			glDrawElements(
@@ -1012,6 +1014,8 @@ namespace SvgRenderer {
 			);
 
 			m_Window->OnUpdate();
+
+			SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
 		}
 	}
 
