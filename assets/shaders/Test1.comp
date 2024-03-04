@@ -4,6 +4,8 @@
 
 layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
 
+const float TOLERANCE = 0.05;
+
 #define MOVE_TO 0
 #define LINE_TO 1
 #define QUAD_TO 2
@@ -258,7 +260,7 @@ void main()
 			{
 				Command cmd = commands[cmdIndex];
 				vec2 last = GetPreviousPoint(pathIndex, cmdIndex);
-				uint count = CalculateNumberOfSimpleCommands(cmd, last, 0.2);
+				uint count = CalculateNumberOfSimpleCommands(cmd, last, TOLERANCE);
 				uint xx = atomicAdd(simpleCommandsCount, count);
 				commands[cmdIndex].startIndexSimpleCommands = xx;
 				commands[cmdIndex].endIndexSimpleCommands = xx + count - 1;

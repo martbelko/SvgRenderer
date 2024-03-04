@@ -24,7 +24,6 @@ namespace SvgRenderer {
 
 	void Shader::Dispatch(uint32_t x, uint32_t y, uint32_t z)
 	{
-		Bind();
 		glDispatchCompute(x, y, z);
 	}
 

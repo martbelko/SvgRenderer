@@ -1,6 +1,7 @@
-#version 450 core
+#version 460 core
 
-layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+#define WG_SIZE 1024
+layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 #define GET_CMD_PATH_INDEX(value) (value >> 16)
 
@@ -51,28 +52,26 @@ layout(std430, binding = 1) buffer Commands
 
 void main()
 {
-	uint index = gl_GlobalInvocationID.y * gl_NumWorkGroups.x + gl_GlobalInvocationID.x;
-	if (index >= commands.length())
+	const uint cmdIndex = (gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x) * WG_SIZE + gl_LocalInvocationIndex;
+	if (cmdIndex < commands.length())
 	{
-		return;
+		Command cmd = commands[cmdIndex];
+		uint pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
+
+		vec2 p1 = cmd.points[0];
+		vec2 p2 = cmd.points[1];
+		vec2 p3 = cmd.points[2];
+
+		mat4 trans = u_GlobalTransform * paths[pathIndex].transform;
+
+		vec2 v1 = (trans * vec4(p1, 1.0, 1.0)).xy;
+		vec2 v2 = (trans * vec4(p2, 1.0, 1.0)).xy;
+		vec2 v3 = (trans * vec4(p3, 1.0, 1.0)).xy;
+
+		cmd.transformedPoints[0] = v1;
+		cmd.transformedPoints[1] = v2;
+		cmd.transformedPoints[2] = v3;
+
+		commands[cmdIndex] = cmd;
 	}
-
-	uint pathIndex = GET_CMD_PATH_INDEX(commands[index].pathIndexCmdType);
-
-	vec2 p1 = commands[index].points[0];
-	vec2 p2 = commands[index].points[1];
-	vec2 p3 = commands[index].points[2];
-
-	mat4 trans = u_GlobalTransform * paths[pathIndex].transform;
-
-	vec2 v1 = (trans * vec4(p1, 1.0, 1.0)).xy;
-	vec2 v2 = (trans * vec4(p2, 1.0, 1.0)).xy;
-	vec2 v3 = (trans * vec4(p3, 1.0, 1.0)).xy;
-
-	commands[index].transformedPoints[0][0] = v1.x;
-	commands[index].transformedPoints[0][1] = v1.y;
-	commands[index].transformedPoints[1][0] = v2.x;
-	commands[index].transformedPoints[1][1] = v2.y;
-	commands[index].transformedPoints[2][0] = v3.x;
-	commands[index].transformedPoints[2][1] = v3.y;
 }

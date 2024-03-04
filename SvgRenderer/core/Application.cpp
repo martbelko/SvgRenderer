@@ -507,6 +507,7 @@ namespace SvgRenderer {
 			base += 4;
 		}
 
+		m_FinalShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
 #if ASYNC == 2
 		glGenTextures(1, &m_AlphaTexture);
 		glBindTexture(GL_TEXTURE_2D, m_AlphaTexture);
@@ -572,18 +573,29 @@ namespace SvgRenderer {
 
 		// 1.step: Transform the paths
 #if ASYNC == 2
-		Timer tsTimer;
+		{
+			Timer tsTimer;
 
-		shader->Bind();
-		shader->SetUniformMat4(0, Globals::GlobalTransform);
+			shader->Bind();
+			shader->SetUniformMat4(0, Globals::GlobalTransform);
 
-		uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.commands.size() / 65535.0f), 1.0f);
-		shader->Dispatch(65535, ySize, 1);
+			constexpr uint32_t wgSize = 1024;
 
-		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+			uint32_t xSize = glm::ceil(Globals::AllPaths.commands.size() / static_cast<float>(wgSize));
+			if (xSize > 65535)
+			{
+				const uint32_t ySize = glm::max(glm::ceil(static_cast<float>(xSize) / 65535.0f), 1.0f);
+				shader->Dispatch(xSize, ySize, 1);
+			}
+			else
+			{
+				shader->Dispatch(xSize, 1, 1);
+			}
 
-		SR_TRACE("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
-		tsTimer.Reset();
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
+		}
 #else
 		{
 			std::vector<uint32_t> indices;
@@ -966,8 +978,6 @@ namespace SvgRenderer {
 
 	void Application::Run()
 	{
-		Ref<Shader> shader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
-
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glEnable(GL_BLEND);
 
@@ -984,7 +994,7 @@ namespace SvgRenderer {
 			GL_ELEMENT_ARRAY_BUFFER,
 			m_TileBuilder.indices.size() * sizeof(uint32_t),
 			m_TileBuilder.indices.data(),
-			GL_STREAM_DRAW
+			GL_STATIC_DRAW
 		);
 
 		glEnableVertexAttribArray(0);
@@ -1017,7 +1027,7 @@ namespace SvgRenderer {
 			(const void*)16
 			);
 
-		shader->Bind();
+		m_FinalShader->Bind();
 
 		glUniform2ui(0, SCREEN_WIDTH, SCREEN_HEIGHT);
 		glUniform2ui(1, ATLAS_SIZE, ATLAS_SIZE);
