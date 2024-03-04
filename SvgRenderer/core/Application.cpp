@@ -905,6 +905,7 @@ namespace SvgRenderer {
 				path.startVisibleTileIndex = accumTileCount;
 				accumTileCount += fineQuadCount;
 			}
+			m_RenderIndicesCount = accumCount * 6;
 			SR_TRACE("Prefix sum: {0}", timerPrefixSum.ElapsedMillis());
 		}
 #endif

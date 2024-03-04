@@ -252,4 +252,6 @@ void main()
 
 		paths[pathIndex] = path;
 	}
+
+	atomic = accumCount;
 }

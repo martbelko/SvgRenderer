@@ -51,6 +51,7 @@ namespace SvgRenderer {
 
 		uint32_t m_Vbo, m_Ibo, m_Vao, m_AlphaTexture;
 		Ref<Shader> m_FinalShader;
+		uint32_t m_RenderIndicesCount;
 	private:
 		static Application s_Instance;
 	};
