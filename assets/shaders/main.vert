@@ -1,4 +1,4 @@
-#version 450
+#version 460 core
 
 layout(location = 0) uniform uvec2 res;
 layout(location = 1) uniform uvec2 atlas_size;
