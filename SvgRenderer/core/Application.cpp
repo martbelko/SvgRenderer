@@ -551,8 +551,8 @@ namespace SvgRenderer {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_Vbo);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, atlasBuf);
 
-		Ref<Shader> shader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test.comp");
-		Ref<Shader> shader2 = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Test1.comp");
+		Ref<Shader> shaderTransform = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Transform.comp");
+		Ref<Shader> shaderPreFlatten = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFlatten.comp");
 		Ref<Shader> shaderFlatten = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Flatten.comp");
 		Ref<Shader> shaderPreFill = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFill.comp");
 		Ref<Shader> shaderFill = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Fill.comp");
@@ -576,21 +576,14 @@ namespace SvgRenderer {
 		{
 			Timer tsTimer;
 
-			shader->Bind();
-			shader->SetUniformMat4(0, Globals::GlobalTransform);
+			shaderTransform->Bind();
+			shaderTransform->SetUniformMat4(0, Globals::GlobalTransform);
 
-			constexpr uint32_t wgSize = 1024;
+			constexpr uint32_t wgSize = 256;
 
 			uint32_t xSize = glm::ceil(Globals::AllPaths.commands.size() / static_cast<float>(wgSize));
-			if (xSize > 65535)
-			{
-				const uint32_t ySize = glm::max(glm::ceil(static_cast<float>(xSize) / 65535.0f), 1.0f);
-				shader->Dispatch(xSize, ySize, 1);
-			}
-			else
-			{
-				shader->Dispatch(xSize, 1, 1);
-			}
+			const uint32_t ySize = glm::max(glm::ceil(static_cast<float>(xSize) / 65535.0f), 1.0f);
+			shaderTransform->Dispatch(xSize, ySize, 1);
 
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
@@ -613,10 +606,10 @@ namespace SvgRenderer {
 		// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
 		Timer timer2;
 #if ASYNC == 2
-		shader2->Bind();
+		shaderPreFlatten->Bind();
 		{
 			uint32_t ySize = glm::max(glm::ceil(Globals::AllPaths.paths.size() / 65535.0f), 1.0f);
-			shader2->Dispatch(65535, ySize, 1);
+			shaderPreFlatten->Dispatch(65535, ySize, 1);
 		}
 
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
