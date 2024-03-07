@@ -547,20 +547,20 @@ namespace SvgRenderer {
 		float clearValueAlpha = 1.0f;
 		glClearTexSubImage(m_AlphaTexture, 0, 0, 0, 0, 1, 1, 0, GL_RED, GL_FLOAT, &clearValueAlpha);
 
-		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf, atlasBuf;
+		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf, bugBuf;
 		glCreateBuffers(1, &cmdBuf);
 		glCreateBuffers(1, &pathBuf);
 		glCreateBuffers(1, &simpleCmdBuf);
 		glCreateBuffers(1, &atomicBuf);
 		glCreateBuffers(1, &tilesBuf);
-		glCreateBuffers(1, &atlasBuf);
+		glCreateBuffers(1, &bugBuf);
 
 		GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
 		glNamedBufferStorage(cmdBuf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
 		glNamedBufferStorage(pathBuf, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
 		glNamedBufferStorage(simpleCmdBuf, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data(), bufferFlags);
 		glNamedBufferStorage(tilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
-		glNamedBufferStorage(atlasBuf, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
+		glNamedBufferStorage(bugBuf, sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
 
 		uint32_t atomCounter = 0;
 		glNamedBufferStorage(atomicBuf, sizeof(uint32_t), &atomCounter, bufferFlags);
@@ -571,7 +571,7 @@ namespace SvgRenderer {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, atomicBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, tilesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_Vbo);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, atlasBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, bugBuf);
 
 		Ref<Shader> shaderTransform = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Transform.comp");
 		Ref<Shader> shaderPreFlatten = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFlatten.comp");
