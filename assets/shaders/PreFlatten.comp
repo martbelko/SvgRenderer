@@ -232,19 +232,24 @@ uint CalculateNumberOfSimpleCommands(Command cmd, vec2 last, float tolerance)
 }
 
 shared uint pathIndex;
-//shared uint offset;
 shared Path path;
 shared uint numIter;
 
 void main()
 {
+	if (gl_GlobalInvocationID.x == 0 && gl_GlobalInvocationID.y == 0)
+	{
+		simpleCommandsCount = 0;
+	}
+
+	barrier();
+
 	if (gl_LocalInvocationIndex == 0)
 	{
 		pathIndex = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
 		if (pathIndex < paths.length())
 		{
 			path = paths[pathIndex];
-			//offset = path.startCmdIndex;
 			numIter = uint(ceil((path.endCmdIndex - path.startCmdIndex + 1) / float(WG_SIZE)));
 		}
 	}

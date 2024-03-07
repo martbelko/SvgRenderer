@@ -82,15 +82,13 @@ namespace SvgRenderer {
 		glCreateBuffers(1, &tilesBuf);
 		glCreateBuffers(1, &bugBuf);
 
-		GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
+		GLenum bufferFlags = 0;
 		glNamedBufferStorage(cmdBuf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
 		glNamedBufferStorage(pathBuf, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
 		glNamedBufferStorage(simpleCmdBuf, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data(), bufferFlags);
 		glNamedBufferStorage(tilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
-		glNamedBufferStorage(bugBuf, sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
-
-		uint32_t atomCounter = 0;
-		glNamedBufferStorage(atomicBuf, sizeof(uint32_t), &atomCounter, bufferFlags);
+		glNamedBufferStorage(bugBuf, sizeof(float), nullptr, bufferFlags);
+		glNamedBufferStorage(atomicBuf, sizeof(uint32_t), nullptr, bufferFlags);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, pathBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, cmdBuf);
@@ -233,7 +231,7 @@ namespace SvgRenderer {
 				shaderCoarse->Dispatch(65535, ySize, 1);
 			}
 
-			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+			//glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Coarse: {0} ms", timerCoarse.ElapsedMillis());
 		}
