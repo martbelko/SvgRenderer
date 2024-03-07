@@ -11,6 +11,7 @@ namespace SvgRenderer {
 
 	struct CurvedPolygon;
 	class Shader;
+	class Pipeline;
 
 	class Application
 	{
@@ -52,6 +53,8 @@ namespace SvgRenderer {
 		uint32_t m_Vbo, m_Ibo, m_Vao, m_AlphaTexture;
 		Ref<Shader> m_FinalShader;
 		uint32_t m_RenderIndicesCount;
+
+		Pipeline* m_Pipeline;
 	private:
 		static Application s_Instance;
 	};

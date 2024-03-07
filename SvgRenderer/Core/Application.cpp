@@ -15,6 +15,9 @@
 #include "Renderer/StorageBuffer.h"
 #include "Renderer/UniformBuffer.h"
 
+#include "Renderer/Pipeline/GPUPipeline.h"
+#include "Renderer/Pipeline/CPUPipeline.h"
+
 #include "Renderer/Defs.h"
 #include "Renderer/Flattening.h"
 #include "Renderer/Bezier.h"
@@ -482,7 +485,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/tiger.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -592,6 +595,13 @@ namespace SvgRenderer {
 #else
 		SR_INFO("Running in CPU single-thread mode\n");
 #endif
+
+#define XXX
+#ifdef XXX
+		m_Pipeline = new CPUPipeline();
+		m_Pipeline->Init();
+		m_Pipeline->Render();
+#else
 
 		// Everything after this line may be done in each frame
 		Timer globalTimer;
@@ -985,6 +995,7 @@ namespace SvgRenderer {
 #endif
 
 		SR_INFO("Total execution time: {0} ms", globalTimer.ElapsedMillis());
+#endif
 	}
 
 	void Application::Shutdown()
@@ -997,29 +1008,16 @@ namespace SvgRenderer {
 
 	void Application::Run()
 	{
-		m_FinalShader->Bind();
-
-		glUniform2ui(0, SCREEN_WIDTH, SCREEN_HEIGHT);
-		glUniform2ui(1, ATLAS_SIZE, ATLAS_SIZE);
-		glBindTextureUnit(0, m_AlphaTexture);
-
 		m_Running = true;
 		while (m_Running)
 		{
 			Timer timer;
 
-			glClearColor(1.0, 1.0, 1.0, 1.0);
-			glClear(GL_COLOR_BUFFER_BIT);
-			glDrawElements(
-				GL_TRIANGLES,
-				m_TileBuilder.indices.size(),
-				GL_UNSIGNED_INT,
-				nullptr
-			);
+			m_Pipeline->Final();
 
 			m_Window->OnUpdate();
 
-			SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
+			//SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
 		}
 	}
 

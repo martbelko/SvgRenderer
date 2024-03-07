@@ -9,13 +9,7 @@ namespace SvgRenderer {
 	TileBuilder::TileBuilder()
 	{
 		atlas.resize(ATLAS_SIZE * ATLAS_SIZE, 0);
-		for (uint32_t row = 0; row < TILE_SIZE; ++row)
-		{
-			for (uint32_t col = 0; col < TILE_SIZE; ++col)
-			{
-				atlas[row * ATLAS_SIZE + col] = 1.0f;
-			}
-		}
+		atlas[0] = 1.0f;
 	}
 
 	void TileBuilder::Tile(int32_t x, int32_t y, const std::array<uint8_t, TILE_SIZE * TILE_SIZE>& data, uint32_t tileOffset, uint32_t quadIndex, const std::array<uint8_t, 4>& color)
