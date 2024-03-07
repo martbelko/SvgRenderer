@@ -382,6 +382,9 @@ namespace SvgRenderer {
 
 	void CPUPipeline::Final()
 	{
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		glEnable(GL_BLEND);
+
 		m_FinalShader->Bind();
 
 		glUniform2ui(0, SCREEN_WIDTH, SCREEN_HEIGHT);
