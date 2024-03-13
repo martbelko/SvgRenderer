@@ -419,4 +419,333 @@ namespace SvgRenderer::Flattening {
 		return simplePaths;
 	}
 
+	static glm::vec2 GetPreviousPoint(const PathRender& path, uint32_t index)
+	{
+		if (index == path.startCmdIndex)
+		{
+			return glm::vec2(0, 0);
+		}
+
+		PathRenderCmd& rndCmd = Globals::AllPaths.commands[index - 1];
+		uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+		switch (pathType)
+		{
+		case MOVE_TO:
+		case LINE_TO:
+			return rndCmd.transformedPoints[0];
+		case QUAD_TO:
+			return rndCmd.transformedPoints[1];
+		case CUBIC_TO:
+			return rndCmd.transformedPoints[2];
+		}
+	}
+
+	static glm::vec2 ProjectPointOntoScreenBoundary(glm::vec2 point)
+	{
+		if (Flattening::IsPointInsideViewSpace(point))
+		{
+			return point;
+		}
+
+		if (point.y >= 0 && point.y < SCREEN_HEIGHT - 1)
+		{
+			if (point.x < 0)
+			{
+				return glm::vec2(-1, point.y);
+			}
+			if (point.x >= SCREEN_WIDTH)
+			{
+				return glm::vec2(SCREEN_WIDTH, point.y);
+			}
+		}
+
+		const float distTop = glm::abs(point.y);
+		const float distBottom = glm::abs(point.y - SCREEN_HEIGHT - 1);
+		float xCoord = glm::clamp(point.x, -1.0f, static_cast<float>(SCREEN_WIDTH));
+		if (distBottom < distTop)
+		{
+			return glm::vec2(xCoord, SCREEN_HEIGHT);
+		}
+		return glm::vec2(xCoord, -1);
+	}
+
+	static std::vector<glm::vec2> CalculateClosestDistanceScreenBoundary(const glm::vec2& from, const glm::vec2& to)
+	{
+		auto isPointOnBoundary = [](glm::vec2 p)
+		{
+			return (p.x == -1.0f || p.x == SCREEN_WIDTH || p.y == -1.0f || p.y == SCREEN_HEIGHT);
+		};
+
+		SR_ASSERT(isPointOnBoundary(from));
+		SR_ASSERT(isPointOnBoundary(to));
+
+		std::vector<glm::vec2> path;
+		path.push_back(from);
+
+		// If they are on the same line on the boundary
+		if ((from.x == -1.0f && to.x == -1.0f) ||
+			(from.x == SCREEN_WIDTH && to.x == SCREEN_WIDTH) ||
+			(from.y == -1.0f && to.y == -1.0f) ||
+			(from.y == SCREEN_HEIGHT && to.y == SCREEN_HEIGHT))
+		{
+			path.push_back(to);
+			return path;
+		}
+
+		// If the point 'from' is on the top or bottom boundary
+		if (from.y == -1.0f || from.y == SCREEN_HEIGHT)
+		{
+			if (to.x > from.x)
+			{
+				path.push_back(glm::vec2(SCREEN_WIDTH, from.y));
+			}
+			else
+			{
+				path.push_back(glm::vec2(-1.0f, from.y));
+			}
+
+			path.push_back(to);
+		}
+		else // Point 'from' is on the left or right boundary
+		{
+			if (to.y > from.y)
+			{
+				path.push_back(glm::vec2(from.x, SCREEN_HEIGHT));
+			}
+			else
+			{
+				path.push_back(glm::vec2(from.x, -1.0f));
+			}
+		}
+
+		return path;
+	}
+
+	struct Segment
+	{
+		glm::vec2 p1;
+		glm::vec2 p2;
+	};
+
+	static std::optional<glm::vec2> LineLineIntersection(const Segment& seg1, const Segment& seg2)
+	{
+		const float x1 = seg1.p1.x;
+		const float y1 = seg1.p1.y;
+		const float x2 = seg1.p2.x;
+		const float y2 = seg1.p2.y;
+
+		const float x3 = seg2.p1.x;
+		const float y3 = seg2.p1.y;
+		const float x4 = seg2.p2.x;
+		const float y4 = seg2.p2.y;
+
+		const float d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+
+		if (glm::abs(d) < std::numeric_limits<float>::epsilon())
+		{
+			return {};
+		}
+
+		const float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+		const float u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / d;
+
+		if (t >= 0.0f && t <= 1.0f && u >= 0.0f && u <= 1.0f)
+		{
+			return glm::vec2(x1 + t * (x2 - x1), y1 + t * (y2 - y1));
+		}
+
+		return {};
+	}
+
+	static Segment segLow = Segment{ .p1 = glm::vec2(0, 0), .p2 = glm::vec2(SCREEN_WIDTH - 1, 0) };
+	static Segment segUp = Segment{ .p1 = glm::vec2(0, SCREEN_HEIGHT - 1), .p2 = glm::vec2(SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1) };
+	static Segment segLeft = Segment{ .p1 = glm::vec2(0, 0), .p2 = glm::vec2(0, SCREEN_HEIGHT - 1) };
+	static Segment segRight = Segment{ .p1 = glm::vec2(SCREEN_WIDTH - 1, 0), .p2 = glm::vec2(SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1) };
+
+	static std::optional<glm::vec2> FindIntersectionWithScreen(const Segment& seg)
+	{
+		std::optional<glm::vec2> int1 = LineLineIntersection(segLow, seg);
+		std::optional<glm::vec2> int2 = LineLineIntersection(segUp, seg);
+		std::optional<glm::vec2> int3 = LineLineIntersection(segLeft, seg);
+		std::optional<glm::vec2> int4 = LineLineIntersection(segRight, seg);
+
+		if (int1)
+		{
+			return int1;
+		}
+		if (int2)
+		{
+			return int2;
+		}
+		if (int3)
+		{
+			return int3;
+		}
+		return int4;
+	}
+
+	std::vector<SvgRenderer::SimpleCommand> Flatten(uint32_t cmdIndex, glm::vec2 last, float tolerance)
+	{
+		static glm::vec2 first = { 0, 0 };
+		static glm::vec2 firstProjected = { 0, 0 };
+
+		std::vector<SimpleCommand> simpleCmds;
+
+		const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
+		uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+		if (cmdType == MOVE_TO)
+		{
+			first = cmd.transformedPoints[0];
+			firstProjected = ProjectPointOntoScreenBoundary(first);
+			return {};
+		}
+
+		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
+		const PathRender& path = Globals::AllPaths.paths[pathIndex];
+		bool wasLastMove = false;
+		if (path.startCmdIndex == cmdIndex || GET_CMD_TYPE(Globals::AllPaths.commands[cmdIndex - 1].pathIndexCmdType) == MOVE_TO)
+		{
+			wasLastMove = true;
+		}
+
+		switch (cmdType)
+		{
+		case MOVE_TO:
+			break;
+		case LINE_TO:
+		{
+			glm::vec2 point = cmd.transformedPoints[0];
+			if (wasLastMove)
+			{
+				// TODO: Add check for when line crosses the whole screen boundary, and handle it
+				if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+				{
+					glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+					glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+					std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
+
+					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
+					for (uint32_t i = 1; i < points.size(); i++)
+					{
+						simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = points[i] });
+					}
+				}
+				else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
+				{
+					glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+					glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
+
+					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+				}
+				else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+				{
+					glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+					glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
+
+					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = pointProjected });
+				}
+				else
+				{
+					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+				}
+			}
+			else
+			{
+				// TODO: Add check for when line crosses the whole screen boundary, and handle it
+				if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+				{
+					glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+					glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+					std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
+
+					for (uint32_t i = 1; i < points.size(); i++)
+					{
+						simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = points[i] });
+					}
+				}
+				else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
+				{
+					glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+					glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
+
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+				}
+				else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+				{
+					glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+					glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
+
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = pointProjected });
+				}
+				else
+				{
+					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+				}
+			}
+
+			break;
+		}
+		case QUAD_TO:
+		{
+			SR_ASSERT(false, "Implement");
+
+			const glm::vec2& p1 = cmd.transformedPoints[0];
+			const glm::vec2& p2 = cmd.transformedPoints[1];
+
+			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * p1 + p2)));
+			float t = 0.0f;
+			while (t < 1.0f)
+			{
+				t = glm::min(t + dt, 1.0f);
+				const glm::vec2 p01 = glm::lerp(last, p1, t);
+				const glm::vec2 p12 = glm::lerp(p1, p2, t);
+				const glm::vec2 p1 = glm::lerp(p01, p12, t);
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = p1 });
+			}
+
+			break;
+		}
+		case CUBIC_TO:
+		{
+			SR_ASSERT(false, "Implement");
+
+			const glm::vec2& p1 = cmd.transformedPoints[0];
+			const glm::vec2& p2 = cmd.transformedPoints[1];
+			const glm::vec2& p3 = cmd.transformedPoints[2];
+
+			const glm::vec2 a = -1.0f * last + 3.0f * p1 - 3.0f * p2 + p3;
+			const glm::vec2 b = 3.0f * (last - 2.0f * p1 + p2);
+			const float conc = glm::max(glm::length(b), glm::length(a + b));
+			const float dt = glm::sqrt((glm::sqrt(8.0f) * tolerance) / conc);
+			float t = 0.0f;
+			while (t < 1.0f)
+			{
+				t = glm::min(t + dt, 1.0f);
+				const glm::vec2 p01 = glm::lerp(last, p1, t);
+				const glm::vec2 p12 = glm::lerp(p1, p2, t);
+				const glm::vec2 p23 = glm::lerp(p2, p3, t);
+				const glm::vec2 p012 = glm::lerp(p01, p12, t);
+				const glm::vec2 p123 = glm::lerp(p12, p23, t);
+				const glm::vec2 p1 = glm::lerp(p012, p123, t);
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = p1 });
+			}
+
+			break;
+		}
+		default:
+			//assert(false && "Unknown path type");
+			break;
+		}
+
+		return simpleCmds;
+	}
+
 }

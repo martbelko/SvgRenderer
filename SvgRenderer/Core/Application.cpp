@@ -485,14 +485,14 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/test4.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node
 		Render(root);
 		delete root;
 
-		m_Pipeline = new GPUPipeline();
+		m_Pipeline = new CPUPipeline();
 		SR_INFO("Running in mode\n");
 		m_Pipeline->Init();
 		m_Pipeline->Render();
@@ -518,7 +518,7 @@ namespace SvgRenderer {
 
 			m_Window->OnUpdate();
 
-			SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
+			//SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
 		}
 	}
 

@@ -165,7 +165,7 @@ namespace SvgRenderer {
 	void Rasterizer::CommandFromArray(const PathRenderCmd& cmd, const glm::vec2& lastPoint)
 	{
 		std::vector<uint32_t> indices;
-		indices.resize(cmd.endIndexSimpleCommands - cmd.startIndexSimpleCommands + 1);
+		indices.resize(cmd.endIndexSimpleCommands - cmd.startIndexSimpleCommands);
 		std::iota(indices.begin(), indices.end(), cmd.startIndexSimpleCommands);
 
 		auto GetSimpleCmdPrevPoint = [lastPoint, &cmd](uint32_t simpleCmdIndex) -> glm::vec2

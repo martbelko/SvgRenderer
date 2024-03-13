@@ -96,35 +96,72 @@ namespace SvgRenderer {
 			SR_TRACE("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
 		}
 
-		// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
-		Timer timer2;
-
-		std::atomic_uint32_t simpleCommandsCount = 0;
+		// 2.step: Flattening
+		uint32_t simpleCmdIndex = 0;
+		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.paths.size());
-			std::iota(indices.begin(), indices.end(), 0);
-
-			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&simpleCommandsCount](uint32_t pathIndex)
+			const PathRender& path = Globals::AllPaths.paths[pathIndex];
+			glm::vec2 last = { 0, 0 };
+			for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
 			{
-				const PathRender& path = Globals::AllPaths.paths[pathIndex];
-
-				std::vector<uint32_t> idx;
-				idx.resize(path.endCmdIndex - path.startCmdIndex + 1);
-				std::iota(idx.begin(), idx.end(), path.startCmdIndex);
-
-				std::for_each(executionPolicy, idx.cbegin(), idx.cend(), [&simpleCommandsCount, &path](uint32_t cmdIndex)
+				std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE);
+				PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
+				cmd.startIndexSimpleCommands = simpleCmdIndex;
+				for (uint32_t i = 0; i < simpleCmds.size(); i++)
 				{
-					PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
-					glm::vec2 last = GetPreviousPoint(path, cmdIndex);
-					uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
-					uint32_t xx = simpleCommandsCount.fetch_add(count);
-					rndCmd.startIndexSimpleCommands = xx;
-					rndCmd.endIndexSimpleCommands = xx + count - 1;
-				});
-			});
-			SR_TRACE("Step 2: {0} ms", timer2.ElapsedMillis());
+					//char ch = simpleCmds[i].type == MOVE_TO ? 'M' : 'L';
+					//std::cout << ch << ' ' << simpleCmds[i].point.x << ' ' << simpleCmds[i].point.y << ' ';
+					Globals::AllPaths.simpleCommands[simpleCmdIndex++] = simpleCmds[i];
+				}
+
+				cmd.endIndexSimpleCommands = simpleCmdIndex;
+
+				uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+				switch (cmdType)
+				{
+				case MOVE_TO:
+				case LINE_TO:
+					last = cmd.transformedPoints[0];
+					break;
+				case QUAD_TO:
+					last = cmd.transformedPoints[1];
+					break;
+				case CUBIC_TO:
+					last = cmd.transformedPoints[2];
+					break;
+				}
+			}
 		}
+
+		//// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
+		//Timer timer2;
+		//
+		//std::atomic_uint32_t simpleCommandsCount = 0;
+		//{
+		//	std::vector<uint32_t> indices;
+		//	indices.resize(Globals::AllPaths.paths.size());
+		//	std::iota(indices.begin(), indices.end(), 0);
+		//
+		//	std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&simpleCommandsCount](uint32_t pathIndex)
+		//	{
+		//		const PathRender& path = Globals::AllPaths.paths[pathIndex];
+		//
+		//		std::vector<uint32_t> idx;
+		//		idx.resize(path.endCmdIndex - path.startCmdIndex + 1);
+		//		std::iota(idx.begin(), idx.end(), path.startCmdIndex);
+		//
+		//		std::for_each(executionPolicy, idx.cbegin(), idx.cend(), [&simpleCommandsCount, &path](uint32_t cmdIndex)
+		//		{
+		//			PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
+		//			glm::vec2 last = GetPreviousPoint(path, cmdIndex);
+		//			uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
+		//			uint32_t xx = simpleCommandsCount.fetch_add(count);
+		//			rndCmd.startIndexSimpleCommands = xx;
+		//			rndCmd.endIndexSimpleCommands = xx + count;
+		//		});
+		//	});
+		//	SR_TRACE("Step 2: {0} ms", timer2.ElapsedMillis());
+		//}
 
 		// Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
 
@@ -176,7 +213,7 @@ namespace SvgRenderer {
 				for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
 				{
 					PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
-					for (uint32_t i = rndCmd.startIndexSimpleCommands; i <= rndCmd.endIndexSimpleCommands; i++)
+					for (uint32_t i = rndCmd.startIndexSimpleCommands; i < rndCmd.endIndexSimpleCommands; i++)
 					{
 						path.bbox.AddPoint(Globals::AllPaths.simpleCommands[i].point);
 					}

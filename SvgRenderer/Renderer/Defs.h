@@ -19,7 +19,7 @@ namespace SvgRenderer {
 	#define MAKE_CMD_PATH_INDEX(value, index) ((index << 16) | (value & 0x0000FFFF))
 	#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0xFFFF00FF))
 
-#define ASYNC 1
+#define ASYNC 0
 #if ASYNC == 0
 	static constexpr std::execution::sequenced_policy executionPolicy = std::execution::seq;
 #elif ASYNC == 1
@@ -61,6 +61,7 @@ namespace SvgRenderer {
 		uint32_t _pad0;
 		std::array<glm::vec2, 4> points; // Maybe unused, but maximum 3 points for cubicTo
 		std::array<glm::vec2, 4> transformedPoints; // Maybe unused, but maximum 3 points for cubicTo
+		//std::array<glm::vec2, 3> projectedPoints; // Maybe unused, but maximum 3 points for cubicTo
 	};
 
 	struct PathsContainer
