@@ -74,20 +74,18 @@ namespace SvgRenderer {
 		float clearValueAlpha = 1.0f;
 		glClearTexSubImage(m_AlphaTexture, 0, 0, 0, 0, 1, 1, 1, GL_RED, GL_FLOAT, &clearValueAlpha);
 
-		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf, bugBuf;
+		GLuint cmdBuf, pathBuf, simpleCmdBuf, atomicBuf, tilesBuf;
 		glCreateBuffers(1, &cmdBuf);
 		glCreateBuffers(1, &pathBuf);
 		glCreateBuffers(1, &simpleCmdBuf);
 		glCreateBuffers(1, &atomicBuf);
 		glCreateBuffers(1, &tilesBuf);
-		glCreateBuffers(1, &bugBuf);
 
 		GLenum bufferFlags = 0;
 		glNamedBufferStorage(cmdBuf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
 		glNamedBufferStorage(pathBuf, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
 		glNamedBufferStorage(simpleCmdBuf, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data(), bufferFlags);
 		glNamedBufferStorage(tilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
-		glNamedBufferStorage(bugBuf, sizeof(float), nullptr, bufferFlags);
 		glNamedBufferStorage(atomicBuf, sizeof(uint32_t), nullptr, bufferFlags);
 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, pathBuf);
@@ -96,7 +94,6 @@ namespace SvgRenderer {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, atomicBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, tilesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_Vbo);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, bugBuf);
 
 		shaderTransform = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Transform.comp");
 		shaderPreFlatten = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFlatten.comp");
