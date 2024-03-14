@@ -485,7 +485,7 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		SR_TRACE("Parsing start");
-		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/test4.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/test7.svg");
 		SR_TRACE("Parsing finish");
 
 		// This actually fills information about colors and other attributes from the SVG root node

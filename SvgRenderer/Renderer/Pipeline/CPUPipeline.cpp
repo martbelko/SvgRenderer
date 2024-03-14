@@ -102,24 +102,29 @@ namespace SvgRenderer {
 		{
 			const PathRender& path = Globals::AllPaths.paths[pathIndex];
 			glm::vec2 last = { 0, 0 };
+			bool wasLastMove = false;
 			for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
 			{
-				std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE);
+				std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE, wasLastMove);
 				PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
 				cmd.startIndexSimpleCommands = simpleCmdIndex;
 				for (uint32_t i = 0; i < simpleCmds.size(); i++)
 				{
-					//char ch = simpleCmds[i].type == MOVE_TO ? 'M' : 'L';
-					//std::cout << ch << ' ' << simpleCmds[i].point.x << ' ' << simpleCmds[i].point.y << ' ';
+					char ch = simpleCmds[i].type == MOVE_TO ? 'M' : 'L';
+					std::cout << ch << ' ' << simpleCmds[i].point.x << ' ' << simpleCmds[i].point.y << ' ';
 					Globals::AllPaths.simpleCommands[simpleCmdIndex++] = simpleCmds[i];
 				}
 
 				cmd.endIndexSimpleCommands = simpleCmdIndex;
 
 				uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+				wasLastMove = false;
 				switch (cmdType)
 				{
 				case MOVE_TO:
+					wasLastMove = true;
+					last = cmd.transformedPoints[0];
+					break;
 				case LINE_TO:
 					last = cmd.transformedPoints[0];
 					break;

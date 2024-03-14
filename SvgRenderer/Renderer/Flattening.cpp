@@ -96,8 +96,7 @@ namespace SvgRenderer::Flattening {
 
 	bool IsPointInsideViewSpace(const glm::vec2& v)
 	{
-		constexpr float padding = 1.0f;
-		return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
+		return !(v.x >= SCREEN_WIDTH || v.x < 0 || v.y >= SCREEN_HEIGHT || v.y < 0);
 	}
 
 	typedef int OutCode;
@@ -557,10 +556,10 @@ namespace SvgRenderer::Flattening {
 		return {};
 	}
 
-	static Segment segLow = Segment{ .p1 = glm::vec2(0, 0), .p2 = glm::vec2(SCREEN_WIDTH - 1, 0) };
-	static Segment segUp = Segment{ .p1 = glm::vec2(0, SCREEN_HEIGHT - 1), .p2 = glm::vec2(SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1) };
-	static Segment segLeft = Segment{ .p1 = glm::vec2(0, 0), .p2 = glm::vec2(0, SCREEN_HEIGHT - 1) };
-	static Segment segRight = Segment{ .p1 = glm::vec2(SCREEN_WIDTH - 1, 0), .p2 = glm::vec2(SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1) };
+	static Segment segLow = Segment{ .p1 = glm::vec2(0, 0), .p2 = glm::vec2(SCREEN_WIDTH, 0) };
+	static Segment segUp = Segment{ .p1 = glm::vec2(0, SCREEN_HEIGHT), .p2 = glm::vec2(SCREEN_WIDTH, SCREEN_HEIGHT) };
+	static Segment segLeft = Segment{ .p1 = glm::vec2(0, 0), .p2 = glm::vec2(0, SCREEN_HEIGHT) };
+	static Segment segRight = Segment{ .p1 = glm::vec2(SCREEN_WIDTH, 0), .p2 = glm::vec2(SCREEN_WIDTH, SCREEN_HEIGHT) };
 
 	static std::optional<glm::vec2> FindIntersectionWithScreen(const Segment& seg)
 	{
@@ -584,119 +583,127 @@ namespace SvgRenderer::Flattening {
 		return int4;
 	}
 
-	std::vector<SvgRenderer::SimpleCommand> Flatten(uint32_t cmdIndex, glm::vec2 last, float tolerance)
+	static void HandleLine(glm::vec2 last, glm::vec2 point, bool wasLastMove, std::vector<SimpleCommand>& simpleCmds)
 	{
-		static glm::vec2 first = { 0, 0 };
-		static glm::vec2 firstProjected = { 0, 0 };
+		if (wasLastMove)
+		{
+			// TODO: Add check for when line crosses the whole screen boundary, and handle it
+			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point) && IsLineInsideViewSpace(last, point))
+			{
+				SR_ASSERT(false);
+			}
 
+			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+			{
+				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+				std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
+
+				simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
+				for (uint32_t i = 1; i < points.size(); i++)
+				{
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = points[i] });
+				}
+			}
+			else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
+			{
+				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+				glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
+
+				simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+			}
+			else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+			{
+				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+				glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
+
+				simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = pointProjected });
+			}
+			else
+			{
+				simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+			}
+		}
+		else
+		{
+			// TODO: Add check for when line crosses the whole screen boundary, and handle it
+			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point) && IsLineInsideViewSpace(last, point))
+			{
+				SR_ASSERT(false);
+			}
+
+			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+			{
+				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+				std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
+
+				for (uint32_t i = 1; i < points.size(); i++)
+				{
+					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = points[i] });
+				}
+			}
+			else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
+			{
+				FindIntersectionWithScreen(Segment{ .p1 = { 1155.95, 999.909 }, .p2 = { 1156.09, 1001.28 } });
+				glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
+
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+			}
+			else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+			{
+				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+				glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
+
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = pointProjected });
+			}
+			else
+			{
+				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+			}
+		}
+	}
+
+	std::vector<SvgRenderer::SimpleCommand> Flatten(uint32_t cmdIndex, glm::vec2 last, float tolerance, bool wasLastMove)
+	{
 		std::vector<SimpleCommand> simpleCmds;
 
 		const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
 		uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
 		if (cmdType == MOVE_TO)
 		{
-			first = cmd.transformedPoints[0];
-			firstProjected = ProjectPointOntoScreenBoundary(first);
 			return {};
 		}
 
 		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
 		const PathRender& path = Globals::AllPaths.paths[pathIndex];
-		bool wasLastMove = false;
-		if (path.startCmdIndex == cmdIndex || GET_CMD_TYPE(Globals::AllPaths.commands[cmdIndex - 1].pathIndexCmdType) == MOVE_TO)
-		{
-			wasLastMove = true;
-		}
+		//bool wasLastMove = false;
+		//if (path.startCmdIndex == cmdIndex || GET_CMD_TYPE(Globals::AllPaths.commands[cmdIndex - 1].pathIndexCmdType) == MOVE_TO)
+		//{
+		//	wasLastMove = true;
+		//}
 
 		switch (cmdType)
 		{
 		case MOVE_TO:
+			//simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = cmd.transformedPoints[0] });
 			break;
 		case LINE_TO:
 		{
 			glm::vec2 point = cmd.transformedPoints[0];
-			if (wasLastMove)
-			{
-				// TODO: Add check for when line crosses the whole screen boundary, and handle it
-				if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
-				{
-					glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
-					glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
-					std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
-
-					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
-					for (uint32_t i = 1; i < points.size(); i++)
-					{
-						simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = points[i] });
-					}
-				}
-				else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
-				{
-					glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
-					glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
-
-					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
-				}
-				else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
-				{
-					glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
-					glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
-
-					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = pointProjected });
-				}
-				else
-				{
-					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
-				}
-			}
-			else
-			{
-				// TODO: Add check for when line crosses the whole screen boundary, and handle it
-				if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
-				{
-					glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
-					glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
-					std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
-
-					for (uint32_t i = 1; i < points.size(); i++)
-					{
-						simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = points[i] });
-					}
-				}
-				else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
-				{
-					glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
-					glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
-
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
-				}
-				else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
-				{
-					glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
-					glm::vec2 intersection = *FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point });
-
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = pointProjected });
-				}
-				else
-				{
-					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
-				}
-			}
-
+			//simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+			HandleLine(last, point, wasLastMove, simpleCmds);
 			break;
 		}
 		case QUAD_TO:
 		{
-			SR_ASSERT(false, "Implement");
-
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 
@@ -708,15 +715,16 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p01 = glm::lerp(last, p1, t);
 				const glm::vec2 p12 = glm::lerp(p1, p2, t);
 				const glm::vec2 p1 = glm::lerp(p01, p12, t);
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = p1 });
+				//simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = p1 });
+				HandleLine(last, p1, wasLastMove, simpleCmds);
+				last = p1;
+				wasLastMove = false;
 			}
 
 			break;
 		}
 		case CUBIC_TO:
 		{
-			SR_ASSERT(false, "Implement");
-
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 			const glm::vec2& p3 = cmd.transformedPoints[2];
@@ -735,7 +743,10 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p012 = glm::lerp(p01, p12, t);
 				const glm::vec2 p123 = glm::lerp(p12, p23, t);
 				const glm::vec2 p1 = glm::lerp(p012, p123, t);
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = p1 });
+				//simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = p1 });
+				HandleLine(last, p1, wasLastMove, simpleCmds);
+				last = p1;
+				wasLastMove = false;
 			}
 
 			break;

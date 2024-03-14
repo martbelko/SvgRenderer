@@ -104,8 +104,8 @@ namespace SvgRenderer {
 
 				{
 					std::lock_guard lock(mut1);
-					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].area += int32_t(area * 1000.0f);
-					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].height += int32_t(height * 1000.0f);
+					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].area += int32_t(area * 100.0f);
+					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].height += int32_t(height * 100.0f);
 					GetTileFromWindowPos(x, y).hasIncrements = true;
 				}
 
@@ -355,8 +355,8 @@ namespace SvgRenderer {
 				{
 					const Increment& increment = tile.increments[y * TILE_SIZE + x];
 					// Loop over each increment inside the tile
-					areas[y * TILE_SIZE + x] = increment.area / 1000.0f; // Just simple increment for area
-					heights[y * TILE_SIZE + x] = increment.height / 1000.0f; // Just simple increment for height
+					areas[y * TILE_SIZE + x] = increment.area / 100.0f; // Just simple increment for area
+					heights[y * TILE_SIZE + x] = increment.height / 100.0f; // Just simple increment for height
 				}
 			}
 
