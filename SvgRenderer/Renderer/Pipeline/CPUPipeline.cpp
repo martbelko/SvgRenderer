@@ -110,33 +110,34 @@ namespace SvgRenderer {
 				uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
 				glm::vec2 last = GetPreviousPoint(Globals::AllPaths.paths[pathIndex], cmdIndex);
 				uint32_t count = Flattening::CalculateNumberOfSimpleCommands(cmdIndex, last, TOLERANCE);
-				uint32_t xx = simpleCommandsCount.fetch_add(count);
-				cmd.startIndexSimpleCommands = xx;
-				cmd.endIndexSimpleCommands = xx + count;
+				uint32_t currentCount = simpleCommandsCount.fetch_add(count);
+				cmd.startIndexSimpleCommands = currentCount;
+				cmd.endIndexSimpleCommands = currentCount + count;
 			});
 			SR_TRACE("Pre-flatten: {0} ms", timerPreFlatten.ElapsedMillis());
 		}
 
 		// 2.step: Flattening
 		{
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.commands.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
 			Timer timerFlatten;
-
-			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
+			std::for_each(executionPolicy, indices.begin(), indices.end(), [](uint32_t cmdIndex)
 			{
+				PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
+				uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
-				for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
-				{
-					glm::vec2 last = GetPreviousPoint(path, cmdIndex);
-					std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE);
-					PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
 
-					uint32_t simpleCmdIndex = cmd.startIndexSimpleCommands;
-					for (uint32_t i = 0; i < simpleCmds.size(); i++)
-					{
-						Globals::AllPaths.simpleCommands[simpleCmdIndex++] = simpleCmds[i];
-					}
+				glm::vec2 last = GetPreviousPoint(path, cmdIndex);
+				std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE);
+
+				for (uint32_t i = 0; i < simpleCmds.size(); i++)
+				{
+					Globals::AllPaths.simpleCommands[cmd.startIndexSimpleCommands + i] = simpleCmds[i];
 				}
-			}
+			});
 			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
 		}
 
