@@ -44,16 +44,27 @@ namespace SvgRenderer {
 		}
 	}
 
+	// This remains fixed for the whole run of the program, may change in the future
+	// For now, it is designed to store all the data from paris.svg,
+	// but I am sure there is a way to resize this according to the size
+	// we need for the SVG
+	static constexpr uint32_t SIMPLE_COMMANDS_COUNT = 2'000'000;
+	static constexpr uint32_t TILES_COUNT = 1'000'000;
+	static constexpr uint32_t QUADS_COUNT = 250'000;
+	static constexpr uint32_t VERTICES_COUNT = QUADS_COUNT * 4;
+	static constexpr uint32_t INDICES_COUNT = QUADS_COUNT * 6;
+
 	void CPUPipeline::Init()
 	{
-		Globals::AllPaths.simpleCommands.resize(2'000'000);
-		Globals::Tiles.tiles.resize(1'000'000); // This remains fixed for the whole run of the program, may change in the future
-		constexpr uint32_t maxNumberOfQuads = 250'000;
-		m_TileBuilder.vertices.resize(maxNumberOfQuads * 4);
-		m_TileBuilder.indices.reserve(maxNumberOfQuads * 6);
+		Globals::AllPaths.simpleCommands.resize(SIMPLE_COMMANDS_COUNT);
+		Globals::Tiles.tiles.resize(TILES_COUNT);
+		m_TileBuilder.vertices.resize(VERTICES_COUNT);
+		m_TileBuilder.indices.reserve(INDICES_COUNT);
+		m_TileBuilder.atlas.resize(ATLAS_SIZE * ATLAS_SIZE, 0);
 
+		// 4 vertices, 6 indices for 1 quad
 		uint32_t base = 0;
-		for (size_t i = 0; i < maxNumberOfQuads * 6; i += 6)
+		for (size_t i = 0; i < INDICES_COUNT; i += 6)
 		{
 			m_TileBuilder.indices.push_back(base);
 			m_TileBuilder.indices.push_back(base + 1);
@@ -79,8 +90,33 @@ namespace SvgRenderer {
 
 	void CPUPipeline::Render()
 	{
-		// Everything after this line may be done in each frame
 		Timer globalTimer;
+
+		// 0.step: Reset all the data
+		{
+			for (uint32_t tileIndex = 0; tileIndex < TILES_COUNT; tileIndex++)
+			{
+				Globals::Tiles.tiles[tileIndex].hasIncrements = false;
+				Globals::Tiles.tiles[tileIndex].nextTileIndex = std::numeric_limits<uint32_t>::max();
+				Globals::Tiles.tiles[tileIndex].winding = 0;
+				for (uint32_t i = 0; i < TILE_SIZE * TILE_SIZE; i++)
+				{
+					Globals::Tiles.tiles[tileIndex].increments[i].area = 0;
+					Globals::Tiles.tiles[tileIndex].increments[i].height = 0;
+				}
+			}
+
+			for (uint32_t vertexIndex = 0; vertexIndex < VERTICES_COUNT; vertexIndex++)
+			{
+				m_TileBuilder.vertices[vertexIndex] = Vertex{ .pos = { -1, -1 }, .uv = { 0, 0 }, .color = { 0, 0, 0, 0 } };
+			}
+
+			m_TileBuilder.atlas[0] = 1.0f;
+			for (uint32_t pixelIndex = 1; pixelIndex < ATLAS_SIZE * ATLAS_SIZE; pixelIndex++)
+			{
+				m_TileBuilder.atlas[pixelIndex] = 0.0f;
+			}
+		}
 
 		// 1.step: Transform the paths
 		{
@@ -141,73 +177,6 @@ namespace SvgRenderer {
 			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
 		}
 
-		//// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
-		//Timer timer2;
-		//
-		//std::atomic_uint32_t simpleCommandsCount = 0;
-		//{
-		//	std::vector<uint32_t> indices;
-		//	indices.resize(Globals::AllPaths.paths.size());
-		//	std::iota(indices.begin(), indices.end(), 0);
-		//
-		//	std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&simpleCommandsCount](uint32_t pathIndex)
-		//	{
-		//		const PathRender& path = Globals::AllPaths.paths[pathIndex];
-		//
-		//		std::vector<uint32_t> idx;
-		//		idx.resize(path.endCmdIndex - path.startCmdIndex + 1);
-		//		std::iota(idx.begin(), idx.end(), path.startCmdIndex);
-		//
-		//		std::for_each(executionPolicy, idx.cbegin(), idx.cend(), [&simpleCommandsCount, &path](uint32_t cmdIndex)
-		//		{
-		//			PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
-		//			glm::vec2 last = GetPreviousPoint(path, cmdIndex);
-		//			uint32_t count = Flattening::CalculateNumberOfSimpleCommands(rndCmd, last, TOLERANCE);
-		//			uint32_t xx = simpleCommandsCount.fetch_add(count);
-		//			rndCmd.startIndexSimpleCommands = xx;
-		//			rndCmd.endIndexSimpleCommands = xx + count;
-		//		});
-		//	});
-		//	SR_TRACE("Step 2: {0} ms", timer2.ElapsedMillis());
-		//}
-
-		// Globals::AllPaths.simpleCommands.resize(simpleCommandsCount);
-
-		// 3.step: Simplify the commands and store in the array
-
-		// 3.1: Flattening
-		//{
-		//	std::vector<uint32_t> indices;
-		//	indices.resize(Globals::AllPaths.paths.size());
-		//	std::iota(indices.begin(), indices.end(), 0);
-		//
-		//	constexpr uint32_t wgSize = 256;
-		//	std::array<uint32_t, wgSize> wgIndices;
-		//	std::iota(wgIndices.begin(), wgIndices.end(), 0);
-		//
-		//	Timer timerFlatten;
-		//	std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&wgIndices, &wgSize](uint32_t pathIndex)
-		//	{
-		//		const PathRender& path = Globals::AllPaths.paths[pathIndex];
-		//		for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
-		//		{
-		//			std::for_each(executionPolicy, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex](uint32_t wgIndex)
-		//			{
-		//				uint32_t cmdIndex = wgIndex + offsetCmdIndex;
-		//				if (cmdIndex > path.endCmdIndex)
-		//				{
-		//					return;
-		//				}
-		//
-		//				PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
-		//				glm::vec2 last = GetPreviousPoint(path, cmdIndex);
-		//				Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
-		//			});
-		//		}
-		//	});
-		//	SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
-		//}
-
 		// 3.2: Calculating BBOX
 		{
 			std::vector<uint32_t> indices;
@@ -250,7 +219,6 @@ namespace SvgRenderer {
 					return;
 				}
 
-				// TODO: We are not interested in tiles, where x-coord of the tile is above SCREEN_WIDTH, or y-coord is above SCREEN_HEIGHT
 				const int32_t minBboxCoordX = glm::floor(path.bbox.min.x);
 				const int32_t minBboxCoordY = glm::floor(path.bbox.min.y);
 				const int32_t maxBboxCoordX = glm::ceil(path.bbox.max.x);
@@ -261,16 +229,14 @@ namespace SvgRenderer {
 				const int32_t maxTileCoordX = glm::ceil(static_cast<float>(maxBboxCoordX) / TILE_SIZE);
 				const int32_t maxTileCoordY = glm::ceil(static_cast<float>(maxBboxCoordY) / TILE_SIZE);
 
-				int32_t m_TileStartX = minTileCoordX;
-				int32_t m_TileStartY = minTileCoordY;
-				uint32_t m_TileCountX = maxTileCoordX - minTileCoordX + 1;
-				uint32_t m_TileCountY = maxTileCoordY - minTileCoordY + 1;
+				uint32_t tileCountX = maxTileCoordX - minTileCoordX + 1;
+				uint32_t tileCountY = maxTileCoordY - minTileCoordY + 1;
 
-				const uint32_t count = m_TileCountX * m_TileCountY;
+				const uint32_t count = tileCountX * tileCountY;
 
-				uint32_t xx = tileCount.fetch_add(count);
-				path.startTileIndex = xx;
-				path.endTileIndex = xx + count - 1;
+				uint32_t oldCount = tileCount.fetch_add(count);
+				path.startTileIndex = oldCount;
+				path.endTileIndex = oldCount + count - 1;
 			});
 			SR_TRACE("Step 4.1: {0} ms", timer41.ElapsedMillis());
 		}
@@ -438,7 +404,7 @@ namespace SvgRenderer {
 
 		glClearColor(1.0, 1.0, 1.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
-		glDrawElements(GL_TRIANGLES, m_TileBuilder.indices.size(), GL_UNSIGNED_INT, nullptr);
+		glDrawElements(GL_TRIANGLES, INDICES_COUNT, GL_UNSIGNED_INT, nullptr);
 	}
 
 }

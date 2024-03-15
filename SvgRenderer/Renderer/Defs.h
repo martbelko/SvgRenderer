@@ -61,7 +61,6 @@ namespace SvgRenderer {
 		uint32_t _pad0;
 		std::array<glm::vec2, 4> points; // Maybe unused, but maximum 3 points for cubicTo
 		std::array<glm::vec2, 4> transformedPoints; // Maybe unused, but maximum 3 points for cubicTo
-		//std::array<glm::vec2, 3> projectedPoints; // Maybe unused, but maximum 3 points for cubicTo
 	};
 
 	struct PathsContainer
@@ -73,8 +72,8 @@ namespace SvgRenderer {
 
 	struct Increment
 	{
-		int32_t area = 0;
-		int32_t height = 0;
+		int32_t area;
+		int32_t height;
 	};
 
 	constexpr float TOLERANCE = 0.05f; // Quality of flattening
@@ -86,9 +85,9 @@ namespace SvgRenderer {
 
 	struct Tile
 	{
-		int32_t winding = 0;
-		uint32_t nextTileIndex = std::numeric_limits<uint32_t>::max();
-		bool hasIncrements = false;
+		int32_t winding;
+		uint32_t nextTileIndex;
+		bool hasIncrements;
 		std::array<Increment, TILE_SIZE * TILE_SIZE> increments;
 	};
 
@@ -100,7 +99,7 @@ namespace SvgRenderer {
 	class Globals
 	{
 	public:
-		inline static glm::mat4 GlobalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0))* glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
+		inline static glm::mat4 GlobalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0)) * glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
 		inline static PathsContainer AllPaths;
 		inline static TilesContainer Tiles;
 	};
