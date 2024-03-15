@@ -48,7 +48,7 @@ namespace SvgRenderer {
 	{
 		Globals::AllPaths.simpleCommands.resize(2'000'000);
 		Globals::Tiles.tiles.resize(1'000'000); // This remains fixed for the whole run of the program, may change in the future
-		constexpr uint32_t maxNumberOfQuads = 150'000;
+		constexpr uint32_t maxNumberOfQuads = 250'000;
 		m_TileBuilder.vertices.resize(maxNumberOfQuads * 4);
 		m_TileBuilder.indices.reserve(maxNumberOfQuads * 6);
 
@@ -97,45 +97,48 @@ namespace SvgRenderer {
 		}
 
 		// 2.step: Flattening
-		uint32_t simpleCmdIndex = 0;
-		for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 		{
-			const PathRender& path = Globals::AllPaths.paths[pathIndex];
-			glm::vec2 last = { 0, 0 };
-			bool wasLastMove = false;
-			for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
+			Timer timerFlatten;
+
+			uint32_t simpleCmdIndex = 0;
+			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 			{
-				std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE, wasLastMove);
-				PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
-				cmd.startIndexSimpleCommands = simpleCmdIndex;
-				for (uint32_t i = 0; i < simpleCmds.size(); i++)
+				const PathRender& path = Globals::AllPaths.paths[pathIndex];
+				glm::vec2 last = { 0, 0 };
+				bool wasLastMove = false;
+				for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
 				{
-					//char ch = simpleCmds[i].type == MOVE_TO ? 'M' : 'L';
-					//std::cout << ch << ' ' << simpleCmds[i].point.x << ' ' << simpleCmds[i].point.y << '\n';
-					Globals::AllPaths.simpleCommands[simpleCmdIndex++] = simpleCmds[i];
-				}
+					std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE, wasLastMove);
+					PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
 
-				cmd.endIndexSimpleCommands = simpleCmdIndex;
+					cmd.startIndexSimpleCommands = simpleCmdIndex;
+					for (uint32_t i = 0; i < simpleCmds.size(); i++)
+					{
+						Globals::AllPaths.simpleCommands[simpleCmdIndex++] = simpleCmds[i];
+					}
+					cmd.endIndexSimpleCommands = simpleCmdIndex;
 
-				uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
-				wasLastMove = false;
-				switch (cmdType)
-				{
-				case MOVE_TO:
-					wasLastMove = true;
-					last = cmd.transformedPoints[0];
-					break;
-				case LINE_TO:
-					last = cmd.transformedPoints[0];
-					break;
-				case QUAD_TO:
-					last = cmd.transformedPoints[1];
-					break;
-				case CUBIC_TO:
-					last = cmd.transformedPoints[2];
-					break;
+					uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+					wasLastMove = false;
+					switch (cmdType)
+					{
+					case MOVE_TO:
+						wasLastMove = true;
+						last = cmd.transformedPoints[0];
+						break;
+					case LINE_TO:
+						last = cmd.transformedPoints[0];
+						break;
+					case QUAD_TO:
+						last = cmd.transformedPoints[1];
+						break;
+					case CUBIC_TO:
+						last = cmd.transformedPoints[2];
+						break;
+					}
 				}
 			}
+			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
 		}
 
 		//// 2.step: Calculate number of simple commands and their indexes for each path and each command in the path
