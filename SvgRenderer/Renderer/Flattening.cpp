@@ -608,18 +608,126 @@ namespace SvgRenderer::Flattening {
 		return count;
 	}
 
-	bool IsEqual(const glm::vec2& vec1, const glm::vec2& vec2, float tolerance = 0.01f)
+	static bool IsEqual(const glm::vec2& vec1, const glm::vec2& vec2, float tolerance = 0.01f)
 	{
 		float xd = glm::abs(vec1.x - vec2.x);
 		float yd = glm::abs(vec1.y - vec2.y);
 		return (glm::abs(vec1.x - vec2.x) <= tolerance) && (glm::abs(vec1.y - vec2.y) <= tolerance);
 	}
 
+	static uint32_t HandleLineNumberOfSimpleCommands(glm::vec2 last, glm::vec2 point, bool wasLastMove)
+	{
+		if (wasLastMove)
+		{
+			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point) && IsLineInsideViewSpace(last, point))
+			{
+				glm::vec2 intersectionNear, intersectionFar;
+				uint32_t count = FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersectionNear, intersectionFar);
+				SR_ASSERT(count == 2);
+
+				return 2;
+			}
+
+			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+			{
+				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+
+				if (IsEqual(lastProjected, pointProjected))
+				{
+					return 1;
+				}
+
+				std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
+				return static_cast<uint32_t>(points.size());
+			}
+			else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
+			{
+				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+				glm::vec2 intersection;
+				FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersection, intersection);
+				if (IsEqual(lastProjected, intersection))
+				{
+					return 2;
+				}
+
+				return 3;
+			}
+			else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+			{
+				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+				glm::vec2 intersection;
+				FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersection, intersection);
+				if (IsEqual(intersection, pointProjected))
+				{
+					return 2;
+				}
+
+				return 3;
+			}
+			else
+			{
+				if (IsEqual(last, point))
+				{
+					return 1;
+				}
+
+				return 2;
+			}
+		}
+		else
+		{
+			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point) && IsLineInsideViewSpace(last, point))
+			{
+				glm::vec2 intersectionNear, intersectionFar;
+				uint32_t count = FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersectionNear, intersectionFar);
+				SR_ASSERT(count == 2);
+
+				return 2;
+			}
+
+			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+			{
+				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+
+				std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
+				return static_cast<uint32_t>(points.size() - 1);
+			}
+			else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
+			{
+				glm::vec2 intersection;
+				FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersection, intersection);
+				if (IsEqual(intersection, point))
+				{
+					return 1;
+				}
+
+				return 2;
+			}
+			else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+			{
+				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+				glm::vec2 intersection;
+				FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersection, intersection);
+				if (IsEqual(intersection, pointProjected))
+				{
+					return 1;
+				}
+
+				return 2;
+			}
+			else
+			{
+				return 1;
+			}
+		}
+	}
+
 	static void HandleLine(glm::vec2 last, glm::vec2 point, bool wasLastMove, std::vector<SimpleCommand>& simpleCmds)
 	{
 		if (wasLastMove)
 		{
-			// TODO: Add check for when line crosses the whole screen boundary, and handle it
 			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point) && IsLineInsideViewSpace(last, point))
 			{
 				glm::vec2 intersectionNear, intersectionFar;
@@ -695,7 +803,6 @@ namespace SvgRenderer::Flattening {
 		}
 		else
 		{
-			// TODO: Add check for when line crosses the whole screen boundary, and handle it
 			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point) && IsLineInsideViewSpace(last, point))
 			{
 				glm::vec2 intersectionNear, intersectionFar;
@@ -711,10 +818,6 @@ namespace SvgRenderer::Flattening {
 			{
 				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
 				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
-				//if (IsEqual(lastProjected, pointProjected))
-				//{
-				//	return;
-				//}
 
 				std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
 				for (uint32_t i = 1; i < points.size(); i++)
@@ -751,17 +854,98 @@ namespace SvgRenderer::Flattening {
 			}
 			else
 			{
-				//if (IsEqual(last, point))
-				//{
-				//	return;
-				//}
-
 				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
 			}
 		}
 	}
 
-	std::vector<SvgRenderer::SimpleCommand> Flatten(uint32_t cmdIndex, glm::vec2 last, float tolerance, bool wasLastMove)
+	uint32_t CalculateNumberOfSimpleCommands(uint32_t cmdIndex, glm::vec2 last, float tolerance)
+	{
+		std::vector<SimpleCommand> simpleCmds;
+
+		const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
+		uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+		if (cmdType == MOVE_TO)
+		{
+			return 0;
+		}
+
+		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
+		const PathRender& path = Globals::AllPaths.paths[pathIndex];
+		bool wasLastMove = false;
+		if (path.startCmdIndex == cmdIndex || GET_CMD_TYPE(Globals::AllPaths.commands[cmdIndex - 1].pathIndexCmdType) == MOVE_TO)
+		{
+			wasLastMove = true;
+		}
+
+		switch (cmdType)
+		{
+		case MOVE_TO:
+			break;
+		case LINE_TO:
+		{
+			glm::vec2 point = cmd.transformedPoints[0];
+			return HandleLineNumberOfSimpleCommands(last, point, wasLastMove);
+		}
+		case QUAD_TO:
+		{
+			const glm::vec2& p1 = cmd.transformedPoints[0];
+			const glm::vec2& p2 = cmd.transformedPoints[1];
+
+			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * p1 + p2)));
+			float t = 0.0f;
+			uint32_t count = 0;
+			while (t < 1.0f)
+			{
+				t = glm::min(t + dt, 1.0f);
+				const glm::vec2 p01 = glm::lerp(last, p1, t);
+				const glm::vec2 p12 = glm::lerp(p1, p2, t);
+				const glm::vec2 p1 = glm::lerp(p01, p12, t);
+
+				count += HandleLineNumberOfSimpleCommands(last, p1, wasLastMove);
+				last = p1;
+				wasLastMove = false;
+			}
+
+			return count;
+		}
+		case CUBIC_TO:
+		{
+			const glm::vec2& p1 = cmd.transformedPoints[0];
+			const glm::vec2& p2 = cmd.transformedPoints[1];
+			const glm::vec2& p3 = cmd.transformedPoints[2];
+
+			const glm::vec2 a = -1.0f * last + 3.0f * p1 - 3.0f * p2 + p3;
+			const glm::vec2 b = 3.0f * (last - 2.0f * p1 + p2);
+			const float conc = glm::max(glm::length(b), glm::length(a + b));
+			const float dt = glm::sqrt((glm::sqrt(8.0f) * tolerance) / conc);
+			float t = 0.0f;
+			uint32_t count = 0;
+			while (t < 1.0f)
+			{
+				t = glm::min(t + dt, 1.0f);
+				const glm::vec2 p01 = glm::lerp(last, p1, t);
+				const glm::vec2 p12 = glm::lerp(p1, p2, t);
+				const glm::vec2 p23 = glm::lerp(p2, p3, t);
+				const glm::vec2 p012 = glm::lerp(p01, p12, t);
+				const glm::vec2 p123 = glm::lerp(p12, p23, t);
+				const glm::vec2 p1 = glm::lerp(p012, p123, t);
+
+				count += HandleLineNumberOfSimpleCommands(last, p1, wasLastMove);
+				last = p1;
+				wasLastMove = false;
+			}
+
+			return count;
+		}
+		default:
+			SR_ASSERT(false, "Unknown path type");
+		}
+
+		return 0;
+	}
+
+	std::vector<SvgRenderer::SimpleCommand> Flatten(uint32_t cmdIndex, glm::vec2 last, float tolerance)
 	{
 		std::vector<SimpleCommand> simpleCmds;
 
@@ -774,7 +958,7 @@ namespace SvgRenderer::Flattening {
 
 		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
 		const PathRender& path = Globals::AllPaths.paths[pathIndex];
-		wasLastMove = false;
+		bool wasLastMove = false;
 		if (path.startCmdIndex == cmdIndex || GET_CMD_TYPE(Globals::AllPaths.commands[cmdIndex - 1].pathIndexCmdType) == MOVE_TO)
 		{
 			wasLastMove = true;
@@ -803,7 +987,7 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p01 = glm::lerp(last, p1, t);
 				const glm::vec2 p12 = glm::lerp(p1, p2, t);
 				const glm::vec2 p1 = glm::lerp(p01, p12, t);
-				//simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = p1 });
+
 				HandleLine(last, p1, wasLastMove, simpleCmds);
 				last = p1;
 				wasLastMove = false;
@@ -831,7 +1015,7 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p012 = glm::lerp(p01, p12, t);
 				const glm::vec2 p123 = glm::lerp(p12, p23, t);
 				const glm::vec2 p1 = glm::lerp(p012, p123, t);
-				//simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = p1 });
+
 				HandleLine(last, p1, wasLastMove, simpleCmds);
 				last = p1;
 				wasLastMove = false;
@@ -840,7 +1024,7 @@ namespace SvgRenderer::Flattening {
 			break;
 		}
 		default:
-			//assert(false && "Unknown path type");
+			SR_ASSERT(false, "Unknown path type");
 			break;
 		}
 

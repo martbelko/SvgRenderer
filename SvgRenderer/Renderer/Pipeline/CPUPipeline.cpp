@@ -96,45 +96,44 @@ namespace SvgRenderer {
 			SR_TRACE("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
 		}
 
+		{
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.commands.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
+			Timer timerPreFlatten;
+
+			std::atomic_uint32_t simpleCommandsCount = 0;
+			std::for_each(executionPolicy, indices.begin(), indices.end(), [&simpleCommandsCount](uint32_t cmdIndex)
+			{
+				PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
+				uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
+				glm::vec2 last = GetPreviousPoint(Globals::AllPaths.paths[pathIndex], cmdIndex);
+				uint32_t count = Flattening::CalculateNumberOfSimpleCommands(cmdIndex, last, TOLERANCE);
+				uint32_t xx = simpleCommandsCount.fetch_add(count);
+				cmd.startIndexSimpleCommands = xx;
+				cmd.endIndexSimpleCommands = xx + count;
+			});
+			SR_TRACE("Pre-flatten: {0} ms", timerPreFlatten.ElapsedMillis());
+		}
+
 		// 2.step: Flattening
 		{
 			Timer timerFlatten;
 
-			uint32_t simpleCmdIndex = 0;
 			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
 			{
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
-				glm::vec2 last = { 0, 0 };
-				bool wasLastMove = false;
 				for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
 				{
-					std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE, wasLastMove);
+					glm::vec2 last = GetPreviousPoint(path, cmdIndex);
+					std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE);
 					PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
 
-					cmd.startIndexSimpleCommands = simpleCmdIndex;
+					uint32_t simpleCmdIndex = cmd.startIndexSimpleCommands;
 					for (uint32_t i = 0; i < simpleCmds.size(); i++)
 					{
 						Globals::AllPaths.simpleCommands[simpleCmdIndex++] = simpleCmds[i];
-					}
-					cmd.endIndexSimpleCommands = simpleCmdIndex;
-
-					uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
-					wasLastMove = false;
-					switch (cmdType)
-					{
-					case MOVE_TO:
-						wasLastMove = true;
-						last = cmd.transformedPoints[0];
-						break;
-					case LINE_TO:
-						last = cmd.transformedPoints[0];
-						break;
-					case QUAD_TO:
-						last = cmd.transformedPoints[1];
-						break;
-					case CUBIC_TO:
-						last = cmd.transformedPoints[2];
-						break;
 					}
 				}
 			}
