@@ -16,6 +16,8 @@ namespace SvgRenderer {
 
 namespace SvgRenderer::Flattening {
 
+	glm::vec2 ProjectPointOntoScreenBoundary(glm::vec2 point);
+
 	int32_t CalculateNumberOfSimpleCommands(const PathRenderCmd& cmd, const glm::vec2& last, float tolerance);
 	int32_t CalculateNumberOfSimpleCommands(const PathCmd& cmd, const glm::vec2& last, float tolerance);
 

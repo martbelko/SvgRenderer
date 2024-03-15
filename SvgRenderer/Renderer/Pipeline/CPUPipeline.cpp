@@ -110,8 +110,8 @@ namespace SvgRenderer {
 				cmd.startIndexSimpleCommands = simpleCmdIndex;
 				for (uint32_t i = 0; i < simpleCmds.size(); i++)
 				{
-					char ch = simpleCmds[i].type == MOVE_TO ? 'M' : 'L';
-					std::cout << ch << ' ' << simpleCmds[i].point.x << ' ' << simpleCmds[i].point.y << ' ';
+					//char ch = simpleCmds[i].type == MOVE_TO ? 'M' : 'L';
+					//std::cout << ch << ' ' << simpleCmds[i].point.x << ' ' << simpleCmds[i].point.y << '\n';
 					Globals::AllPaths.simpleCommands[simpleCmdIndex++] = simpleCmds[i];
 				}
 
@@ -173,37 +173,37 @@ namespace SvgRenderer {
 		// 3.step: Simplify the commands and store in the array
 
 		// 3.1: Flattening
-		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.paths.size());
-			std::iota(indices.begin(), indices.end(), 0);
-
-			constexpr uint32_t wgSize = 256;
-			std::array<uint32_t, wgSize> wgIndices;
-			std::iota(wgIndices.begin(), wgIndices.end(), 0);
-
-			Timer timerFlatten;
-			std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&wgIndices, &wgSize](uint32_t pathIndex)
-			{
-				const PathRender& path = Globals::AllPaths.paths[pathIndex];
-				for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
-				{
-					std::for_each(executionPolicy, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex](uint32_t wgIndex)
-					{
-						uint32_t cmdIndex = wgIndex + offsetCmdIndex;
-						if (cmdIndex > path.endCmdIndex)
-						{
-							return;
-						}
-
-						PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
-						glm::vec2 last = GetPreviousPoint(path, cmdIndex);
-						Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
-					});
-				}
-			});
-			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
-		}
+		//{
+		//	std::vector<uint32_t> indices;
+		//	indices.resize(Globals::AllPaths.paths.size());
+		//	std::iota(indices.begin(), indices.end(), 0);
+		//
+		//	constexpr uint32_t wgSize = 256;
+		//	std::array<uint32_t, wgSize> wgIndices;
+		//	std::iota(wgIndices.begin(), wgIndices.end(), 0);
+		//
+		//	Timer timerFlatten;
+		//	std::for_each(executionPolicy, indices.cbegin(), indices.cend(), [&wgIndices, &wgSize](uint32_t pathIndex)
+		//	{
+		//		const PathRender& path = Globals::AllPaths.paths[pathIndex];
+		//		for (uint32_t offsetCmdIndex = path.startCmdIndex; offsetCmdIndex <= path.endCmdIndex; offsetCmdIndex += wgSize)
+		//		{
+		//			std::for_each(executionPolicy, wgIndices.cbegin(), wgIndices.cend(), [&path, &offsetCmdIndex](uint32_t wgIndex)
+		//			{
+		//				uint32_t cmdIndex = wgIndex + offsetCmdIndex;
+		//				if (cmdIndex > path.endCmdIndex)
+		//				{
+		//					return;
+		//				}
+		//
+		//				PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
+		//				glm::vec2 last = GetPreviousPoint(path, cmdIndex);
+		//				Flattening::FlattenIntoArray(rndCmd, last, TOLERANCE);
+		//			});
+		//		}
+		//	});
+		//	SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
+		//}
 
 		// 3.2: Calculating BBOX
 		{

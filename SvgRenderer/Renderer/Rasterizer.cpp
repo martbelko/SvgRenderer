@@ -104,8 +104,8 @@ namespace SvgRenderer {
 
 				{
 					std::lock_guard lock(mut1);
-					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].area += int32_t(area * 100.0f);
-					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].height += int32_t(height * 100.0f);
+					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].area += int32_t(area * 1000.0f);
+					GetTileFromWindowPos(x, y).increments[relativeY * TILE_SIZE + relativeX].height += int32_t(height * 1000.0f);
 					GetTileFromWindowPos(x, y).hasIncrements = true;
 				}
 
@@ -202,16 +202,19 @@ namespace SvgRenderer {
 		}
 
 		const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex - 1];
+		if (cmd.startIndexSimpleCommands != cmd.endIndexSimpleCommands)
+		{
+			return Globals::AllPaths.simpleCommands[cmd.endIndexSimpleCommands - 1].point;
+		}
+
 		uint32_t pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
 		switch (pathType)
 		{
 		case MOVE_TO:
-		case LINE_TO:
-			return cmd.transformedPoints[0];
-		case QUAD_TO:
-			return cmd.transformedPoints[1];
-		case CUBIC_TO:
-			return cmd.transformedPoints[2];
+		{
+			glm::vec2 p = cmd.transformedPoints[0];
+			return p;
+		}
 		}
 
 		SR_ASSERT(false, "Invalid path type");
@@ -355,8 +358,8 @@ namespace SvgRenderer {
 				{
 					const Increment& increment = tile.increments[y * TILE_SIZE + x];
 					// Loop over each increment inside the tile
-					areas[y * TILE_SIZE + x] = increment.area / 100.0f; // Just simple increment for area
-					heights[y * TILE_SIZE + x] = increment.height / 100.0f; // Just simple increment for height
+					areas[y * TILE_SIZE + x] = increment.area / 1000.0f; // Just simple increment for area
+					heights[y * TILE_SIZE + x] = increment.height / 1000.0f; // Just simple increment for height
 				}
 			}
 
