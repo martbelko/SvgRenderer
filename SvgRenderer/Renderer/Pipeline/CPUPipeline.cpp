@@ -94,7 +94,19 @@ namespace SvgRenderer {
 
 		// 0.step: Reset all the data
 		{
-			for (uint32_t tileIndex = 0; tileIndex < TILES_COUNT; tileIndex++)
+
+			std::vector<uint32_t> tileIndices, vertexIndices, atlasIndices;
+			tileIndices.resize(TILES_COUNT);
+			vertexIndices.resize(VERTICES_COUNT);
+			atlasIndices.resize(ATLAS_SIZE * ATLAS_SIZE - 1);
+
+			std::iota(tileIndices.begin(), tileIndices.end(), 0);
+			std::iota(vertexIndices.begin(), vertexIndices.end(), 0);
+			std::iota(atlasIndices.begin(), atlasIndices.end(), 1);
+
+			Timer timerReset;
+
+			std::for_each(executionPolicy, tileIndices.begin(), tileIndices.end(), [](uint32_t tileIndex)
 			{
 				Globals::Tiles.tiles[tileIndex].hasIncrements = false;
 				Globals::Tiles.tiles[tileIndex].nextTileIndex = std::numeric_limits<uint32_t>::max();
@@ -104,18 +116,20 @@ namespace SvgRenderer {
 					Globals::Tiles.tiles[tileIndex].increments[i].area = 0;
 					Globals::Tiles.tiles[tileIndex].increments[i].height = 0;
 				}
-			}
+			});
 
-			for (uint32_t vertexIndex = 0; vertexIndex < VERTICES_COUNT; vertexIndex++)
+			std::for_each(executionPolicy, vertexIndices.begin(), vertexIndices.end(), [this](uint32_t vertexIndex)
 			{
 				m_TileBuilder.vertices[vertexIndex] = Vertex{ .pos = { -1, -1 }, .uv = { 0, 0 }, .color = { 0, 0, 0, 0 } };
-			}
+			});
 
-			m_TileBuilder.atlas[0] = 1.0f;
-			for (uint32_t pixelIndex = 1; pixelIndex < ATLAS_SIZE * ATLAS_SIZE; pixelIndex++)
+			std::for_each(executionPolicy, atlasIndices.begin(), atlasIndices.end(), [this](uint32_t pixelIndex)
 			{
 				m_TileBuilder.atlas[pixelIndex] = 0.0f;
-			}
+			});
+			m_TileBuilder.atlas[0] = 1.0f;
+
+			SR_TRACE("Reseting: {0} ms", timerReset.ElapsedMillis());
 		}
 
 		// 1.step: Transform the paths
@@ -132,6 +146,8 @@ namespace SvgRenderer {
 			SR_TRACE("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
 		}
 
+		// 2.step: Flattening
+		// 2.1. Calculate number of simple commands for each path command and their indices
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.commands.size());
@@ -153,7 +169,7 @@ namespace SvgRenderer {
 			SR_TRACE("Pre-flatten: {0} ms", timerPreFlatten.ElapsedMillis());
 		}
 
-		// 2.step: Flattening
+		// 2.2. Actually flatten all the commands
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.commands.size());
@@ -177,7 +193,7 @@ namespace SvgRenderer {
 			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
 		}
 
-		// 3.2: Calculating BBOX
+		// 3.step: Calculating BBOX
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.paths.size());
@@ -361,7 +377,6 @@ namespace SvgRenderer {
 		{
 			GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
 			glNamedBufferData(m_Vbo, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), GL_STATIC_DRAW);
-			//glNamedBufferStorage(m_Vbo, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
 		}
 
 		glCreateBuffers(1, &m_Ibo);
@@ -404,7 +419,11 @@ namespace SvgRenderer {
 
 		glClearColor(1.0, 1.0, 1.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
-		glDrawElements(GL_TRIANGLES, INDICES_COUNT, GL_UNSIGNED_INT, nullptr);
+		glDrawElements(GL_TRIANGLES, m_RenderIndicesCount, GL_UNSIGNED_INT, nullptr);
+
+		//glDeleteBuffers(1, &m_Vbo);
+		//glDeleteBuffers(1, &m_Ibo);
+		//glDeleteVertexArrays(1, &m_Vao);
 	}
 
 }
