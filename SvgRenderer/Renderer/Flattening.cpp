@@ -881,6 +881,7 @@ namespace SvgRenderer::Flattening {
 		switch (cmdType)
 		{
 		case MOVE_TO:
+			SR_ASSERT(false);
 			break;
 		case LINE_TO:
 		{
@@ -892,6 +893,8 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 
+			glm::vec2 lastFLattened = last;
+
 			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * p1 + p2)));
 			float t = 0.0f;
 			uint32_t count = 0;
@@ -902,8 +905,8 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p12 = glm::lerp(p1, p2, t);
 				const glm::vec2 p1 = glm::lerp(p01, p12, t);
 
-				count += HandleLineNumberOfSimpleCommands(last, p1, wasLastMove);
-				last = p1;
+				count += HandleLineNumberOfSimpleCommands(lastFLattened, p1, wasLastMove);
+				lastFLattened = p1;
 				wasLastMove = false;
 			}
 
@@ -914,6 +917,8 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 			const glm::vec2& p3 = cmd.transformedPoints[2];
+
+			glm::vec2 lastFLattened = last;
 
 			const glm::vec2 a = -1.0f * last + 3.0f * p1 - 3.0f * p2 + p3;
 			const glm::vec2 b = 3.0f * (last - 2.0f * p1 + p2);
@@ -931,8 +936,8 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p123 = glm::lerp(p12, p23, t);
 				const glm::vec2 p1 = glm::lerp(p012, p123, t);
 
-				count += HandleLineNumberOfSimpleCommands(last, p1, wasLastMove);
-				last = p1;
+				count += HandleLineNumberOfSimpleCommands(lastFLattened, p1, wasLastMove);
+				lastFLattened = p1;
 				wasLastMove = false;
 			}
 
@@ -979,6 +984,8 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 
+			glm::vec2 lastFlattened = last;
+
 			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * p1 + p2)));
 			float t = 0.0f;
 			while (t < 1.0f)
@@ -986,10 +993,10 @@ namespace SvgRenderer::Flattening {
 				t = glm::min(t + dt, 1.0f);
 				const glm::vec2 p01 = glm::lerp(last, p1, t);
 				const glm::vec2 p12 = glm::lerp(p1, p2, t);
-				const glm::vec2 p1 = glm::lerp(p01, p12, t);
+				const glm::vec2 point = glm::lerp(p01, p12, t);
 
-				HandleLine(last, p1, wasLastMove, simpleCmds);
-				last = p1;
+				HandleLine(lastFlattened, point, wasLastMove, simpleCmds);
+				lastFlattened = point;
 				wasLastMove = false;
 			}
 
@@ -1000,6 +1007,8 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p1 = cmd.transformedPoints[0];
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 			const glm::vec2& p3 = cmd.transformedPoints[2];
+
+			glm::vec2 lastFlattened = last;
 
 			const glm::vec2 a = -1.0f * last + 3.0f * p1 - 3.0f * p2 + p3;
 			const glm::vec2 b = 3.0f * (last - 2.0f * p1 + p2);
@@ -1014,10 +1023,10 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p23 = glm::lerp(p2, p3, t);
 				const glm::vec2 p012 = glm::lerp(p01, p12, t);
 				const glm::vec2 p123 = glm::lerp(p12, p23, t);
-				const glm::vec2 p1 = glm::lerp(p012, p123, t);
+				const glm::vec2 point = glm::lerp(p012, p123, t);
 
-				HandleLine(last, p1, wasLastMove, simpleCmds);
-				last = p1;
+				HandleLine(lastFlattened, point, wasLastMove, simpleCmds);
+				lastFlattened = point;
 				wasLastMove = false;
 			}
 
