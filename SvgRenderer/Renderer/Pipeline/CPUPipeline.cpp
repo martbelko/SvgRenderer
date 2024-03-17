@@ -95,14 +95,16 @@ namespace SvgRenderer {
 		// 0.step: Reset all the data
 		{
 
-			std::vector<uint32_t> tileIndices, vertexIndices, atlasIndices;
+			std::vector<uint32_t> tileIndices, vertexIndices, atlasIndices, pathIndices;
 			tileIndices.resize(TILES_COUNT);
 			vertexIndices.resize(VERTICES_COUNT);
 			atlasIndices.resize(ATLAS_SIZE * ATLAS_SIZE - 1);
+			pathIndices.resize(Globals::AllPaths.paths.size());
 
 			std::iota(tileIndices.begin(), tileIndices.end(), 0);
 			std::iota(vertexIndices.begin(), vertexIndices.end(), 0);
 			std::iota(atlasIndices.begin(), atlasIndices.end(), 1);
+			std::iota(pathIndices.begin(), pathIndices.end(), 1);
 
 			Timer timerReset;
 
@@ -129,6 +131,12 @@ namespace SvgRenderer {
 			});
 			m_TileBuilder.atlas[0] = 1.0f;
 
+			std::for_each(executionPolicy, pathIndices.begin(), pathIndices.end(), [this](uint32_t pathIndex)
+			{
+				Globals::AllPaths.paths[pathIndex].bbox.min = glm::vec2(std::numeric_limits<float>::max());
+				Globals::AllPaths.paths[pathIndex].bbox.max = glm::vec2(-std::numeric_limits<float>::max());
+			});
+
 			SR_TRACE("Reseting: {0} ms", timerReset.ElapsedMillis());
 		}
 
@@ -138,12 +146,12 @@ namespace SvgRenderer {
 			indices.resize(Globals::AllPaths.commands.size());
 			std::iota(indices.begin(), indices.end(), 0);
 
-			Timer tsTimer;
+			Timer timerTransform;
 			std::for_each(executionPolicy, indices.begin(), indices.end(), [](uint32_t cmdIndex)
 			{
 				TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
 			});
-			SR_TRACE("Transforming paths: {0} ms", tsTimer.ElapsedMillis());
+			SR_TRACE("Transforming paths: {0} ms", timerTransform.ElapsedMillis());
 		}
 
 		// 2.step: Flattening
@@ -184,7 +192,6 @@ namespace SvgRenderer {
 
 				glm::vec2 last = GetPreviousPoint(path, cmdIndex);
 				std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE);
-
 				for (uint32_t i = 0; i < simpleCmds.size(); i++)
 				{
 					Globals::AllPaths.simpleCommands[cmd.startIndexSimpleCommands + i] = simpleCmds[i];
@@ -421,9 +428,9 @@ namespace SvgRenderer {
 		glClear(GL_COLOR_BUFFER_BIT);
 		glDrawElements(GL_TRIANGLES, m_RenderIndicesCount, GL_UNSIGNED_INT, nullptr);
 
-		//glDeleteBuffers(1, &m_Vbo);
-		//glDeleteBuffers(1, &m_Ibo);
-		//glDeleteVertexArrays(1, &m_Vao);
+		glDeleteBuffers(1, &m_Vbo);
+		glDeleteBuffers(1, &m_Ibo);
+		glDeleteVertexArrays(1, &m_Vao);
 	}
 
 }

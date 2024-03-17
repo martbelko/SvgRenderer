@@ -40,8 +40,6 @@
 
 namespace SvgRenderer {
 
-	uint32_t g_PathIndex = 0;
-
 	Application Application::s_Instance;
 
 	static std::pair<QuadraticBezier, QuadraticBezier> SplitByClosestPoint(const QuadraticBezier& quadBez)
@@ -396,29 +394,26 @@ namespace SvgRenderer {
 		}
 	}
 
-	static void Render(const SvgNode* node)
+	static void ProcessSvgNode(const SvgNode* node)
 	{
 		switch (node->type)
 		{
 		case SvgNodeType::Path:
 		{
 			const SvgPath& path = node->as.path;
-
 			AddFillPath(path);
-
 			if (path.stroke.hasStroke)
 			{
 				//AddStrokePath(path, builder);
 			}
 
-			g_PathIndex++;
 			break;
 		}
 		}
 
 		for (const SvgNode* child : node->children)
 		{
-			Render(child);
+			ProcessSvgNode(child);
 		}
 	}
 
@@ -433,7 +428,7 @@ namespace SvgRenderer {
 		cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
 		cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
 		cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
-	};
+	}
 
 	static glm::vec2 GetPreviousPoint(const PathRender& path, uint32_t index)
 	{
@@ -442,19 +437,19 @@ namespace SvgRenderer {
 			return glm::vec2(0, 0);
 		}
 
-		PathRenderCmd& rndCmd = Globals::AllPaths.commands[index - 1];
-		uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+		PathRenderCmd& prevCmd = Globals::AllPaths.commands[index - 1];
+		uint32_t pathType = GET_CMD_TYPE(prevCmd.pathIndexCmdType);
 		switch (pathType)
 		{
 		case MOVE_TO:
 		case LINE_TO:
-			return rndCmd.transformedPoints[0];
+			return prevCmd.transformedPoints[0];
 		case QUAD_TO:
-			return rndCmd.transformedPoints[1];
+			return prevCmd.transformedPoints[1];
 		case CUBIC_TO:
-			return rndCmd.transformedPoints[2];
+			return prevCmd.transformedPoints[2];
 		}
-	};
+	}
 
 	void Application::Init()
 	{
@@ -484,18 +479,17 @@ namespace SvgRenderer {
 
 		Renderer::Init(initWidth, initHeight);
 
-		SR_TRACE("Parsing start");
+		Timer timerParse;
 		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/paris.svg");
-		SR_TRACE("Parsing finish");
+		SR_TRACE("Parsing: {0} ms", timerParse.ElapsedMillis());
 
 		// This actually fills information about colors and other attributes from the SVG root node
-		Render(root);
+		ProcessSvgNode(root);
 		delete root;
 
 		m_Pipeline = new CPUPipeline();
 		SR_INFO("Running in mode\n");
 		m_Pipeline->Init();
-		m_Pipeline->Render();
 	}
 
 	void Application::Shutdown()
@@ -513,12 +507,13 @@ namespace SvgRenderer {
 		{
 			Timer timer;
 
+			m_Pipeline->Render();
 			m_Pipeline->Final();
 			glFinish();
 
 			m_Window->OnUpdate();
 
-			//SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
+			SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
 		}
 	}
 

@@ -577,7 +577,9 @@ namespace SvgRenderer::Flattening {
 			return 0; // This should never happen
 		}
 
+		// There will be max 2 intersection with screen bbox and a line segment
 		std::array<glm::vec2, 2> result;
+
 		uint32_t count = 0;
 		for (uint32_t i = 0; i < 4; i++)
 		{
@@ -903,10 +905,10 @@ namespace SvgRenderer::Flattening {
 				t = glm::min(t + dt, 1.0f);
 				const glm::vec2 p01 = glm::lerp(last, p1, t);
 				const glm::vec2 p12 = glm::lerp(p1, p2, t);
-				const glm::vec2 p1 = glm::lerp(p01, p12, t);
+				const glm::vec2 point = glm::lerp(p01, p12, t);
 
-				count += HandleLineNumberOfSimpleCommands(lastFLattened, p1, wasLastMove);
-				lastFLattened = p1;
+				count += HandleLineNumberOfSimpleCommands(lastFLattened, point, wasLastMove);
+				lastFLattened = point;
 				wasLastMove = false;
 			}
 
@@ -924,6 +926,7 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2 b = 3.0f * (last - 2.0f * p1 + p2);
 			const float conc = glm::max(glm::length(b), glm::length(a + b));
 			const float dt = glm::sqrt((glm::sqrt(8.0f) * tolerance) / conc);
+
 			float t = 0.0f;
 			uint32_t count = 0;
 			while (t < 1.0f)
@@ -934,10 +937,10 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p23 = glm::lerp(p2, p3, t);
 				const glm::vec2 p012 = glm::lerp(p01, p12, t);
 				const glm::vec2 p123 = glm::lerp(p12, p23, t);
-				const glm::vec2 p1 = glm::lerp(p012, p123, t);
+				const glm::vec2 point = glm::lerp(p012, p123, t);
 
-				count += HandleLineNumberOfSimpleCommands(lastFLattened, p1, wasLastMove);
-				lastFLattened = p1;
+				count += HandleLineNumberOfSimpleCommands(lastFLattened, point, wasLastMove);
+				lastFLattened = point;
 				wasLastMove = false;
 			}
 
@@ -945,6 +948,7 @@ namespace SvgRenderer::Flattening {
 		}
 		default:
 			SR_ASSERT(false, "Unknown path type");
+			break;
 		}
 
 		return 0;
