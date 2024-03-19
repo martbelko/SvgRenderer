@@ -545,7 +545,8 @@ namespace SvgRenderer {
 			{
 				if (e.type == EventType::Resize)
 				{
-					OnViewportResize(800, 600);
+					OnViewportResize(e.as.windowResizeEvent.width, e.as.windowResizeEvent.height);
+					SR_WARN("Resize {0} {1}", e.as.windowResizeEvent.width, e.as.windowResizeEvent.height);
 				}
 			}
 			m_Window->ClearEvents();

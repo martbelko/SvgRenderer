@@ -312,13 +312,13 @@ namespace SvgRenderer::Flattening {
 		return false;
 	}
 
-	static Segment segLow = Segment{ .p1 = glm::vec2(-1.0f, -1.0f), .p2 = glm::vec2(Globals::WindowWidth, -1.0f) };
-	static Segment segUp = Segment{ .p1 = glm::vec2(-1.0f, Globals::WindowHeight), .p2 = glm::vec2(Globals::WindowWidth, Globals::WindowHeight) };
-	static Segment segLeft = Segment{ .p1 = glm::vec2(-1.0f, -1.0f), .p2 = glm::vec2(-1.0f, Globals::WindowHeight) };
-	static Segment segRight = Segment{ .p1 = glm::vec2(Globals::WindowWidth, -1.0f), .p2 = glm::vec2(Globals::WindowWidth, Globals::WindowHeight) };
-
 	static uint32_t FindIntersectionWithScreen(const Segment& seg, glm::vec2& intersectionNear, glm::vec2& intersectionFar)
 	{
+		Segment segLow = Segment{ .p1 = glm::vec2(-1.0f, -1.0f), .p2 = glm::vec2(Globals::WindowWidth, -1.0f) };
+		Segment segUp = Segment{ .p1 = glm::vec2(-1.0f, Globals::WindowHeight), .p2 = glm::vec2(Globals::WindowWidth, Globals::WindowHeight) };
+		Segment segLeft = Segment{ .p1 = glm::vec2(-1.0f, -1.0f), .p2 = glm::vec2(-1.0f, Globals::WindowHeight) };
+		Segment segRight = Segment{ .p1 = glm::vec2(Globals::WindowWidth, -1.0f), .p2 = glm::vec2(Globals::WindowWidth, Globals::WindowHeight) };
+
 		std::array<glm::vec2, 4> ints;
 
 		uint32_t bits = 0;

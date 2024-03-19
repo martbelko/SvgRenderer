@@ -88,8 +88,8 @@ namespace SvgRenderer {
 	{
 	public:
 		inline static glm::mat4 GlobalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0)) * glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
-		inline static uint32_t WindowWidth = 1920;
-		inline static uint32_t WindowHeight = 1080;
+		inline static uint32_t WindowWidth = 500;
+		inline static uint32_t WindowHeight = 200;
 
 		inline static PathsContainer AllPaths;
 		inline static TilesContainer Tiles;

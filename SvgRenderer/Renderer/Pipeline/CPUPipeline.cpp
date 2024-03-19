@@ -63,8 +63,7 @@ namespace SvgRenderer {
 		{
 		case MOVE_TO:
 		{
-			glm::vec2 p = cmd.transformedPoints[0];
-			return p;
+			return cmd.transformedPoints[0];
 		}
 		}
 
@@ -112,6 +111,8 @@ namespace SvgRenderer {
 
 		glCreateBuffers(1, &m_Vbo);
 		glCreateBuffers(1, &m_Ibo);
+
+		glNamedBufferData(m_Ibo, m_TileBuilder.indices.size() * sizeof(uint32_t), m_TileBuilder.indices.data(), GL_STATIC_DRAW);
 
 		glCreateVertexArrays(1, &m_Vao);
 		glVertexArrayVertexBuffer(m_Vao, 0, m_Vbo, 0, sizeof(Vertex));
@@ -461,12 +462,7 @@ namespace SvgRenderer {
 			SR_TRACE("Fine: {0}", timerFine.ElapsedMillis());
 		}
 
-		{
-			GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT;
-			glNamedBufferData(m_Vbo, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), GL_STATIC_DRAW);
-		}
-
-		glNamedBufferData(m_Ibo, m_TileBuilder.indices.size() * sizeof(uint32_t), m_TileBuilder.indices.data(), GL_STATIC_DRAW);
+		glNamedBufferData(m_Vbo, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), GL_STATIC_DRAW);
 
 		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 		glTextureSubImage2D(m_AlphaTexture, 0, 0, 0, ATLAS_SIZE, ATLAS_SIZE, GL_RED, GL_FLOAT, m_TileBuilder.atlas.data());
