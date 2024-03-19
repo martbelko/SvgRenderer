@@ -23,9 +23,6 @@ namespace SvgRenderer {
 	constexpr int8_t TILE_SIZE = 16;
 	constexpr uint32_t ATLAS_SIZE = 4096 * 2;
 
-	constexpr uint32_t SCREEN_WIDTH = 1900;
-	constexpr uint32_t SCREEN_HEIGHT = 1024;
-
 	struct SimpleCommand // Lines or moves only
 	{
 		uint32_t type;
@@ -91,6 +88,9 @@ namespace SvgRenderer {
 	{
 	public:
 		inline static glm::mat4 GlobalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0)) * glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
+		inline static uint32_t WindowWidth = 1920;
+		inline static uint32_t WindowHeight = 1080;
+
 		inline static PathsContainer AllPaths;
 		inline static TilesContainer Tiles;
 	};

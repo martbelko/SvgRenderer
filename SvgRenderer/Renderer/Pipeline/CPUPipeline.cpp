@@ -182,6 +182,7 @@ namespace SvgRenderer {
 
 			ForEach(pathIndices.begin(), pathIndices.end(), [this](uint32_t pathIndex)
 			{
+				//Globals::AllPaths.paths[pathIndex].startTileIndex = 0;
 				Globals::AllPaths.paths[pathIndex].bbox.min = glm::vec2(std::numeric_limits<float>::max());
 				Globals::AllPaths.paths[pathIndex].bbox.max = glm::vec2(-std::numeric_limits<float>::max());
 			});
@@ -481,7 +482,7 @@ namespace SvgRenderer {
 		glBindVertexArray(m_Vao);
 		m_FinalShader->Bind();
 
-		glUniform2ui(0, SCREEN_WIDTH, SCREEN_HEIGHT);
+		glUniform2ui(0, Globals::WindowWidth, Globals::WindowHeight);
 		glUniform2ui(1, ATLAS_SIZE, ATLAS_SIZE);
 		glBindTextureUnit(0, m_AlphaTexture);
 

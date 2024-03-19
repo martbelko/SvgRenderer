@@ -28,6 +28,41 @@ namespace SvgRenderer {
 		WindowCallbacks callbacks;
 	};
 
+	struct WindowCloseEvent {};
+
+	struct WindowResizeEvent
+	{
+		uint32_t width;
+		uint32_t height;
+	};
+
+	enum class EventType
+	{
+		Close = 0, Resize
+	};
+
+	struct Event
+	{
+		Event(WindowCloseEvent e)
+		{
+			type = EventType::Close;
+			as = Concrete{ .windowCloseEvent = e };
+		}
+
+		Event(WindowResizeEvent e)
+		{
+			type = EventType::Resize;
+			as = Concrete{ .windowResizeEvent = e };
+		}
+
+		EventType type;
+		union Concrete
+		{
+			WindowCloseEvent windowCloseEvent;
+			WindowResizeEvent windowResizeEvent;
+		} as;
+	};
+
 	class Window
 	{
 	public:
@@ -43,6 +78,9 @@ namespace SvgRenderer {
 		}
 
 		GLFWwindow* GetNativeWindow() const { return m_NativeWindow; }
+
+		const std::vector<Event>& GetAllEvents() const { return m_Events; }
+		void ClearEvents() { m_Events.clear(); }
 	public:
 		static Scope<Window> Create(const WindowDesc& desc)
 		{
@@ -56,6 +94,7 @@ namespace SvgRenderer {
 	private:
 		WindowDesc m_WindowDescriptor;
 		GLFWwindow* m_NativeWindow;
+		std::vector<Event> m_Events;
 	};
 
 }

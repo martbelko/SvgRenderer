@@ -453,7 +453,7 @@ namespace SvgRenderer {
 
 	void Application::Init()
 	{
-		uint32_t initWidth = SCREEN_WIDTH, initHeight = SCREEN_HEIGHT;
+		uint32_t initWidth = Globals::WindowWidth, initHeight = Globals::WindowHeight;
 
 		m_Window = Window::Create({
 			.width = initWidth,
@@ -515,6 +515,14 @@ namespace SvgRenderer {
 		{
 			pos.x -= dist;
 		}
+		if (glfwGetKey(m_Window->GetNativeWindow(), GLFW_KEY_W) == GLFW_PRESS)
+		{
+			pos.y += dist;
+		}
+		if (glfwGetKey(m_Window->GetNativeWindow(), GLFW_KEY_S) == GLFW_PRESS)
+		{
+			pos.y -= dist;
+		}
 
 		Globals::GlobalTransform = glm::translate(glm::mat4(1.0f), pos) * glm::scale(glm::mat4(1.0f), glm::vec3(scale, scale, 1.0f));
 	}
@@ -526,13 +534,21 @@ namespace SvgRenderer {
 		{
 			Timer timer;
 
-			HandleInput();
-
 			m_Pipeline->Render();
 			m_Pipeline->Final();
 			glFinish();
 
 			m_Window->OnUpdate();
+
+			HandleInput();
+			for (const Event& e : m_Window->GetAllEvents())
+			{
+				if (e.type == EventType::Resize)
+				{
+					OnViewportResize(800, 600);
+				}
+			}
+			m_Window->ClearEvents();
 
 			SR_INFO("Frametime: {0} ms", timer.ElapsedMillis());
 		}
@@ -573,6 +589,8 @@ namespace SvgRenderer {
 
 	void Application::OnViewportResize(uint32_t width, uint32_t height)
 	{
+		Globals::WindowWidth = width;
+		Globals::WindowHeight = height;
 	}
 
 }

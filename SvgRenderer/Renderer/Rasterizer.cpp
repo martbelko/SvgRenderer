@@ -195,7 +195,7 @@ namespace SvgRenderer {
 				int32_t nextTileX = GetTileXFromAbsoluteIndex(tile.nextTileIndex - path.startTileIndex);
 				int32_t width = nextTileX - tileX - 1;
 				// If the winding is nonzero, span the whole tile
-				if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= glm::ceil(float(SCREEN_HEIGHT) / TILE_SIZE)
+				if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= glm::ceil(float(Globals::WindowHeight) / TILE_SIZE)
 				    && GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
 				{
 					coarseQuadCount++;
@@ -215,7 +215,7 @@ namespace SvgRenderer {
 
 			int32_t tileX = GetTileXFromAbsoluteIndex(i);
 			int32_t tileY = GetTileYFromAbsoluteIndex(i);
-			if (tileX >= 0 && tileY >= 0 && tileX <= glm::ceil(float(SCREEN_WIDTH) / TILE_SIZE) && tileY <= glm::ceil(float(SCREEN_HEIGHT) / TILE_SIZE))
+			if (tileX >= 0 && tileY >= 0 && tileX <= glm::ceil(float(Globals::WindowWidth) / TILE_SIZE) && tileY <= glm::ceil(float(Globals::WindowHeight) / TILE_SIZE))
 			{
 				fineQuadCount++;
 			}
@@ -246,7 +246,7 @@ namespace SvgRenderer {
 				int32_t nextTileX = GetTileXFromAbsoluteIndex(tile.nextTileIndex - path.startTileIndex);
 				int32_t width = nextTileX - tileX - 1;
 				// If the winding is nonzero, span the whole tile
-				if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= glm::ceil(float(SCREEN_HEIGHT) / TILE_SIZE)
+				if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= glm::ceil(float(Globals::WindowHeight) / TILE_SIZE)
 				    && GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
 				{
 					builder.Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE, quadIndex++, Globals::AllPaths.paths[m_PathIndex].color);
@@ -304,7 +304,7 @@ namespace SvgRenderer {
 
 			int32_t tileX = GetTileXFromAbsoluteIndex(i);
 			int32_t tileY = GetTileYFromAbsoluteIndex(i);
-			if (tileX >= 0 && tileY >= 0 && tileX <= glm::ceil(float(SCREEN_WIDTH) / TILE_SIZE) && tileY <= glm::ceil(float(SCREEN_HEIGHT) / TILE_SIZE))
+			if (tileX >= 0 && tileY >= 0 && tileX <= glm::ceil(float(Globals::WindowWidth) / TILE_SIZE) && tileY <= glm::ceil(float(Globals::WindowHeight) / TILE_SIZE))
 			{
 				builder.Tile(tileX * TILE_SIZE, tileY * TILE_SIZE, tileData, tileIndex++, quadIndex++, Globals::AllPaths.paths[m_PathIndex].color);
 			}

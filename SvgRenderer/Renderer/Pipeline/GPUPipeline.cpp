@@ -255,7 +255,7 @@ namespace SvgRenderer {
 	{
 		m_FinalShader->Bind();
 
-		glUniform2ui(0, SCREEN_WIDTH, SCREEN_HEIGHT);
+		glUniform2ui(0, Globals::WindowWidth, Globals::WindowHeight);
 		glUniform2ui(1, ATLAS_SIZE, ATLAS_SIZE);
 		glBindTextureUnit(0, m_AlphaTexture);
 

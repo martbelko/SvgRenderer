@@ -9,7 +9,7 @@ namespace SvgRenderer::Flattening {
 
 	static bool IsPointInsideViewSpace(const glm::vec2& v)
 	{
-		return !(v.x > SCREEN_WIDTH || v.x < -1.0f || v.y > SCREEN_HEIGHT || v.y < -1.0f);
+		return !(v.x > Globals::WindowWidth || v.x < -1.0f || v.y > Globals::WindowHeight || v.y < -1.0f);
 	}
 
 	typedef int OutCode;
@@ -26,11 +26,11 @@ namespace SvgRenderer::Flattening {
 
 		if (p.x < 0.0f)
 			code |= LEFT;
-		else if (p.x > SCREEN_WIDTH)
+		else if (p.x > Globals::WindowWidth)
 			code |= RIGHT;
 		if (p.y < 0.0f)
 			code |= BOTTOM;
-		else if (p.y > SCREEN_HEIGHT)
+		else if (p.y > Globals::WindowHeight)
 			code |= TOP;
 
 		return code;
@@ -59,8 +59,8 @@ namespace SvgRenderer::Flattening {
 				OutCode outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
 				if (outcodeOut & TOP)
 				{
-					x = p0.x + (p1.x - p0.x) * (SCREEN_HEIGHT - p0.y) / (p1.y - p0.y);
-					y = SCREEN_HEIGHT;
+					x = p0.x + (p1.x - p0.x) * (Globals::WindowHeight - p0.y) / (p1.y - p0.y);
+					y = Globals::WindowHeight;
 				}
 				else if (outcodeOut & BOTTOM)
 				{
@@ -69,8 +69,8 @@ namespace SvgRenderer::Flattening {
 				}
 				else if (outcodeOut & RIGHT)
 				{
-					y = p0.y + (p1.y - p0.y) * (SCREEN_WIDTH - p0.x) / (p1.x - p0.x);
-					x = SCREEN_WIDTH;
+					y = p0.y + (p1.y - p0.y) * (Globals::WindowWidth - p0.x) / (p1.x - p0.x);
+					x = Globals::WindowWidth;
 				}
 				else if (outcodeOut & LEFT)
 				{
@@ -201,24 +201,24 @@ namespace SvgRenderer::Flattening {
 			return point;
 		}
 
-		if (point.y >= 0 && point.y < SCREEN_HEIGHT - 1)
+		if (point.y >= 0 && point.y < Globals::WindowHeight - 1)
 		{
 			if (point.x < 0)
 			{
 				return glm::vec2(-1, point.y);
 			}
-			if (point.x >= SCREEN_WIDTH)
+			if (point.x >= Globals::WindowWidth)
 			{
-				return glm::vec2(SCREEN_WIDTH, point.y);
+				return glm::vec2(Globals::WindowWidth, point.y);
 			}
 		}
 
 		const float distTop = glm::abs(point.y);
-		const float distBottom = glm::abs(point.y - SCREEN_HEIGHT - 1);
-		float xCoord = glm::clamp(point.x, -1.0f, static_cast<float>(SCREEN_WIDTH));
+		const float distBottom = glm::abs(point.y - Globals::WindowHeight - 1);
+		float xCoord = glm::clamp(point.x, -1.0f, static_cast<float>(Globals::WindowWidth));
 		if (distBottom < distTop)
 		{
-			return glm::vec2(xCoord, SCREEN_HEIGHT);
+			return glm::vec2(xCoord, Globals::WindowHeight);
 		}
 		return glm::vec2(xCoord, -1);
 	}
@@ -227,7 +227,7 @@ namespace SvgRenderer::Flattening {
 	{
 		auto isPointOnBoundary = [](glm::vec2 p)
 		{
-			return (p.x == -1.0f || p.x == SCREEN_WIDTH || p.y == -1.0f || p.y == SCREEN_HEIGHT);
+			return (p.x == -1.0f || p.x == Globals::WindowWidth || p.y == -1.0f || p.y == Globals::WindowHeight);
 		};
 
 		SR_ASSERT(isPointOnBoundary(from));
@@ -238,20 +238,20 @@ namespace SvgRenderer::Flattening {
 
 		// If they are on the same line on the boundary
 		if ((from.x == -1.0f && to.x == -1.0f) ||
-			(from.x == SCREEN_WIDTH && to.x == SCREEN_WIDTH) ||
+			(from.x == Globals::WindowWidth && to.x == Globals::WindowWidth) ||
 			(from.y == -1.0f && to.y == -1.0f) ||
-			(from.y == SCREEN_HEIGHT && to.y == SCREEN_HEIGHT))
+			(from.y == Globals::WindowHeight && to.y == Globals::WindowHeight))
 		{
 			path.push_back(to);
 			return path;
 		}
 
 		// If the point 'from' is on the top or bottom boundary
-		if (from.y == -1.0f || from.y == SCREEN_HEIGHT)
+		if (from.y == -1.0f || from.y == Globals::WindowHeight)
 		{
 			if (to.x > from.x)
 			{
-				path.push_back(glm::vec2(SCREEN_WIDTH, from.y));
+				path.push_back(glm::vec2(Globals::WindowWidth, from.y));
 			}
 			else
 			{
@@ -264,7 +264,7 @@ namespace SvgRenderer::Flattening {
 		{
 			if (to.y > from.y)
 			{
-				path.push_back(glm::vec2(from.x, SCREEN_HEIGHT));
+				path.push_back(glm::vec2(from.x, Globals::WindowHeight));
 			}
 			else
 			{
@@ -312,10 +312,10 @@ namespace SvgRenderer::Flattening {
 		return false;
 	}
 
-	static Segment segLow = Segment{ .p1 = glm::vec2(-1.0f, -1.0f), .p2 = glm::vec2(SCREEN_WIDTH, -1.0f) };
-	static Segment segUp = Segment{ .p1 = glm::vec2(-1.0f, SCREEN_HEIGHT), .p2 = glm::vec2(SCREEN_WIDTH, SCREEN_HEIGHT) };
-	static Segment segLeft = Segment{ .p1 = glm::vec2(-1.0f, -1.0f), .p2 = glm::vec2(-1.0f, SCREEN_HEIGHT) };
-	static Segment segRight = Segment{ .p1 = glm::vec2(SCREEN_WIDTH, -1.0f), .p2 = glm::vec2(SCREEN_WIDTH, SCREEN_HEIGHT) };
+	static Segment segLow = Segment{ .p1 = glm::vec2(-1.0f, -1.0f), .p2 = glm::vec2(Globals::WindowWidth, -1.0f) };
+	static Segment segUp = Segment{ .p1 = glm::vec2(-1.0f, Globals::WindowHeight), .p2 = glm::vec2(Globals::WindowWidth, Globals::WindowHeight) };
+	static Segment segLeft = Segment{ .p1 = glm::vec2(-1.0f, -1.0f), .p2 = glm::vec2(-1.0f, Globals::WindowHeight) };
+	static Segment segRight = Segment{ .p1 = glm::vec2(Globals::WindowWidth, -1.0f), .p2 = glm::vec2(Globals::WindowWidth, Globals::WindowHeight) };
 
 	static uint32_t FindIntersectionWithScreen(const Segment& seg, glm::vec2& intersectionNear, glm::vec2& intersectionFar)
 	{

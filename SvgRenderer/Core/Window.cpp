@@ -59,9 +59,14 @@ namespace SvgRenderer {
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-		glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
 
-		glfwWindowHint(GLFW_RESIZABLE, false);
+#ifdef _DEBUG
+		glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
+#else
+		glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, false);
+#endif
+
+		glfwWindowHint(GLFW_RESIZABLE, true);
 
 		GLFWwindow* window = glfwCreateWindow(desc.width, desc.height, desc.title.c_str(), NULL, NULL);
 		if (!window)
@@ -115,7 +120,8 @@ namespace SvgRenderer {
 	void Window::OnWindowShouldClose(GLFWwindow* window)
 	{
 		Window* wnd = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
-		wnd->m_WindowDescriptor.callbacks.onWindowClose();
+		wnd->m_Events.push_back(WindowCloseEvent{});
+		//wnd->m_WindowDescriptor.callbacks.onWindowClose();
 	}
 
 	void Window::OnKeyChanged(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -143,7 +149,8 @@ namespace SvgRenderer {
 	void Window::OnViewportSizeChanged(GLFWwindow* window, int width, int height)
 	{
 		Window* wnd = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
-		wnd->m_WindowDescriptor.callbacks.onViewportSizeChanged(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+		wnd->m_Events.push_back(WindowResizeEvent{ static_cast<uint32_t>(width), static_cast<uint32_t>(height) });
+		//wnd->m_WindowDescriptor.callbacks.onViewportSizeChanged(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
 	}
 
 }
