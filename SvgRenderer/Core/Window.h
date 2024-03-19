@@ -41,6 +41,8 @@ namespace SvgRenderer {
 		{
 			return std::make_pair(m_WindowDescriptor.width, m_WindowDescriptor.height);
 		}
+
+		GLFWwindow* GetNativeWindow() const { return m_NativeWindow; }
 	public:
 		static Scope<Window> Create(const WindowDesc& desc)
 		{

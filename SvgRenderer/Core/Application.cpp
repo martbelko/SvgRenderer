@@ -480,14 +480,14 @@ namespace SvgRenderer {
 		Renderer::Init(initWidth, initHeight);
 
 		Timer timerParse;
-		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/tiger.svg");
 		SR_TRACE("Parsing: {0} ms", timerParse.ElapsedMillis());
 
 		// This actually fills information about colors and other attributes from the SVG root node
 		ProcessSvgNode(root);
 		delete root;
 
-		m_Pipeline = new CPUPipeline();
+		m_Pipeline = new CPUPipeline(CPUMode::Par);
 		SR_INFO("Running in mode\n");
 		m_Pipeline->Init();
 	}
@@ -500,6 +500,25 @@ namespace SvgRenderer {
 
 	OrthographicCamera camera(0, 1280.0f, 0.0f, 720.0f, -100.0f, 100.0f);
 
+	void Application::HandleInput()
+	{
+		static glm::vec3 pos = { 0, 0, 0 };
+		static float scale = 1.0f;
+
+		float dist = 5.0f;
+
+		if (glfwGetKey(m_Window->GetNativeWindow(), GLFW_KEY_A) == GLFW_PRESS)
+		{
+			pos.x += dist;
+		}
+		if (glfwGetKey(m_Window->GetNativeWindow(), GLFW_KEY_D) == GLFW_PRESS)
+		{
+			pos.x -= dist;
+		}
+
+		Globals::GlobalTransform = glm::translate(glm::mat4(1.0f), pos) * glm::scale(glm::mat4(1.0f), glm::vec3(scale, scale, 1.0f));
+	}
+
 	void Application::Run()
 	{
 		m_Running = true;
@@ -507,13 +526,15 @@ namespace SvgRenderer {
 		{
 			Timer timer;
 
+			HandleInput();
+
 			m_Pipeline->Render();
 			m_Pipeline->Final();
 			glFinish();
 
 			m_Window->OnUpdate();
 
-			SR_TRACE("Frametime: {0} ms", timer.ElapsedMillis());
+			SR_INFO("Frametime: {0} ms", timer.ElapsedMillis());
 		}
 	}
 
@@ -524,6 +545,18 @@ namespace SvgRenderer {
 
 	void Application::OnKeyPressed(int key, int repeat)
 	{
+		static glm::vec3 pos = { 0, 0, 0 };
+		static float scale = 1.0f;
+		if (key == GLFW_KEY_A)
+		{
+			pos.x += 1.0f;
+		}
+		else if (key == GLFW_KEY_D)
+		{
+			pos.x -= 1.0f;
+		}
+
+		Globals::GlobalTransform = glm::translate(glm::mat4(1.0f), pos) * glm::scale(glm::mat4(1.0f), glm::vec3(scale, scale, 1.0f));
 	}
 
 	void Application::OnKeyReleased(int key)

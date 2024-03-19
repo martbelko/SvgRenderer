@@ -18,10 +18,17 @@ namespace SvgRenderer {
 	class Rasterizer
 	{
 	public:
-		Rasterizer(const BoundingBox& bbox, uint32_t pathIndex);
+		Rasterizer(uint32_t pathIndex);
 
-		Tile& GetTileFromRelativePos(int32_t x, int32_t y) { return Globals::Tiles.tiles[Globals::AllPaths.paths[pathIndex].startTileIndex + GetTileIndexFromRelativePos(x, y)]; }
-		Tile& GetTileFromWindowPos(int32_t x, int32_t y) { return Globals::Tiles.tiles[Globals::AllPaths.paths[pathIndex].startTileIndex + GetTileIndexFromWindowPos(x, y)]; }
+		void LineTo(const glm::vec2& last, const glm::vec2& p1);
+
+		std::pair<uint32_t, uint32_t> CalculateNumberOfQuads();
+
+		void Coarse(TileBuilder& builder);
+		void Fine(TileBuilder& builder);
+	private:
+		Tile& GetTileFromRelativePos(int32_t x, int32_t y) { return Globals::Tiles.tiles[Globals::AllPaths.paths[m_PathIndex].startTileIndex + GetTileIndexFromRelativePos(x, y)]; }
+		Tile& GetTileFromWindowPos(int32_t x, int32_t y) { return Globals::Tiles.tiles[Globals::AllPaths.paths[m_PathIndex].startTileIndex + GetTileIndexFromWindowPos(x, y)]; }
 
 		uint32_t GetTileIndexFromRelativePos(int32_t x, int32_t y) const { return y * m_TileCountX + x; }
 		uint32_t GetTileIndexFromWindowPos(int32_t x, int32_t y) const
@@ -45,25 +52,12 @@ namespace SvgRenderer {
 			int32_t offset = absIndex / m_TileCountX;
 			return m_TileStartY + offset;
 		}
-
+	private:
 		int32_t m_TileStartX, m_TileStartY;
 		uint32_t m_TileCountX, m_TileCountY;
-
-		uint32_t pathIndex;
-
-		std::mutex mut1;
-		std::mutex mut2;
-
-		void MoveTo(const glm::vec2& last, const glm::vec2& point);
-		void LineTo(const glm::vec2& last, const glm::vec2& p1);
-
-		void CommandFromArray(const PathRenderCmd& command, const glm::vec2& lastPoint);
-		void FillFromArray(uint32_t pathIndex);
-
-		std::pair<uint32_t, uint32_t> CalculateNumberOfQuads();
-
-		void Coarse(TileBuilder& builder);
-		void Finish(TileBuilder& builder);
+		uint32_t m_PathIndex;
+		std::mutex m_Mut1;
+		std::mutex m_Mut2;
 	};
 
 }

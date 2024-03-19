@@ -35,6 +35,8 @@ namespace SvgRenderer {
 	private:
 		Application() = default;
 
+		void HandleInput();
+
 		void OnWindowClose();
 
 		void OnKeyPressed(int key, int repeat);
