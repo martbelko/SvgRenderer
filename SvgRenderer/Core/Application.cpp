@@ -485,7 +485,7 @@ namespace SvgRenderer {
 		ProcessSvgNode(root);
 		delete root;
 
-		m_Pipeline = new CPUPipeline(CPUMode::Par);
+		m_Pipeline = new GPUPipeline();
 		SR_INFO("Running in mode\n");
 		m_Pipeline->Init();
 	}

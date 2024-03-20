@@ -1,0 +1,148 @@
+#version 460 core
+
+#define WG_SIZE 256
+layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+#define MOVE_TO 0
+#define LINE_TO 1
+#define QUAD_TO 2
+#define CUBIC_TO 3
+
+#define GET_CMD_PATH_INDEX(value) (value >> 8)
+#define GET_CMD_TYPE(value) (value & 0x000000FF)
+#define MAKE_CMD_PATH_INDEX(value, index) ((index << 8) | (value & 0x000000FF))
+#define MAKE_CMD_TYPE(value, type) (type | (value & 0xFFFFFF00))
+
+const float TOLERANCE = 0.05f; // Quality of flattening
+const uint TILE_SIZE = 16;
+const uint ATLAS_SIZE = 4096 * 2;
+
+const uint MAX_UINT = 4294967295;
+const float MAX_FLOAT = 3.40282347e+38F;
+
+struct BoundingBox
+{
+	vec4 minmax;
+};
+
+struct Path
+{
+	uint startCmdIndex;
+	uint endCmdIndex;
+	uint startTileIndex;
+	uint endTileIndex;
+	mat4 transform;
+	BoundingBox bbox;
+	uint color;
+	uint startVisibleTileIndex;
+	uint startSpanQuadIndex;
+	uint startTileQuadIndex;
+	bool isBboxVisible;
+	uint _pad0;
+	uint _pad1;
+	uint _pad2;
+};
+
+struct Command
+{
+	uint pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
+	uint startIndexSimpleCommands;
+	uint endIndexSimpleCommands;
+	uint _pad0;
+	vec2 points[4]; // Maybe unused, but maximum 3 points for cubicTo
+	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
+};
+
+struct SimpleCommand // Lines or moves only
+{
+	uint type;
+	uint cmdIndex;
+	vec2 point;
+};
+
+struct Increment
+{
+	int area;
+	int height;
+};
+
+struct Tile
+{
+	int winding;
+	uint nextTileIndex;
+	bool hasIncrements;
+	Increment[TILE_SIZE * TILE_SIZE] increments;
+};
+
+struct Vertex
+{
+	int pos[2];
+	uint uv[2];
+	uint color;
+};
+
+layout(std430, binding = 1) buffer Paths
+{
+	Path paths[];
+};
+
+layout(std430, binding = 2) buffer Commands
+{
+	Command commands[];
+};
+
+layout(std430, binding = 3) buffer SimpleCommands
+{
+	SimpleCommand simpleCommands[];
+};
+
+layout(std430, binding = 4) buffer Tiles
+{
+	Tile tiles[];
+};
+
+layout(std430, binding = 5) buffer Vertices
+{
+	Vertex vertices[];
+};
+
+layout(std430, binding = 6) buffer Atlas
+{
+	float atlas[];
+};
+
+void main()
+{
+	uint index = (gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x) * WG_SIZE + gl_LocalInvocationIndex;
+	if (index < paths.length())
+	{
+		paths[index].bbox.minmax.xy = vec2(MAX_FLOAT);
+		paths[index].bbox.minmax.zw = vec2(-MAX_FLOAT);
+	}
+
+	if (index < tiles.length())
+	{
+		tiles[index].hasIncrements = false;
+		tiles[index].nextTileIndex = MAX_UINT;
+		tiles[index].winding = 0;
+		for (uint i = 0; i < TILE_SIZE * TILE_SIZE; i++)
+		{
+			tiles[index].increments[i].area = 0;
+			tiles[index].increments[i].height = 0;
+		}
+	}
+
+	if (index < vertices.length())
+	{
+		vertices[index] = Vertex(int[2](-1, -1), uint[2](0, 0), 0);
+	}
+
+	if (index == 0)
+	{
+		atlas[0] = 1.0;
+	}
+	else if (index < atlas.length())
+	{
+		atlas[index] = 0.0;
+	}
+}
