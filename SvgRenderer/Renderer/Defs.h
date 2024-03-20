@@ -14,10 +14,10 @@ namespace SvgRenderer {
 	#define QUAD_TO 2
 	#define CUBIC_TO 3
 
-	#define GET_CMD_PATH_INDEX(value) (value >> 16)
-	#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
-	#define MAKE_CMD_PATH_INDEX(value, index) ((index << 16) | (value & 0x0000FFFF))
-	#define MAKE_CMD_TYPE(value, type) ((type << 8) | (value & 0xFFFF00FF))
+	#define GET_CMD_PATH_INDEX(value) (value >> 8)
+	#define GET_CMD_TYPE(value) (value & 0x000000FF)
+	#define MAKE_CMD_PATH_INDEX(value, index) ((index << 8) | (value & 0x000000FF))
+	#define MAKE_CMD_TYPE(value, type) (type | (value & 0xFFFFFF00))
 
 	constexpr float TOLERANCE = 0.05f; // Quality of flattening
 	constexpr int8_t TILE_SIZE = 16;
@@ -88,8 +88,8 @@ namespace SvgRenderer {
 	{
 	public:
 		inline static glm::mat4 GlobalTransform = glm::mat4(1.0f); //glm::translate(glm::mat4(1.0f), glm::vec3(-800, 0, 0)) * glm::scale(glm::mat4(1.0f), { 3.0f, 3.0f, 1.0f });
-		inline static uint32_t WindowWidth = 500;
-		inline static uint32_t WindowHeight = 200;
+		inline static uint32_t WindowWidth = 1280;
+		inline static uint32_t WindowHeight = 720;
 
 		inline static PathsContainer AllPaths;
 		inline static TilesContainer Tiles;

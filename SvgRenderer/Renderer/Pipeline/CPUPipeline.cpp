@@ -15,12 +15,12 @@ namespace SvgRenderer {
 		return Globals::GlobalTransform * (transform * glm::vec4(point, 1.0f, 1.0f));
 	}
 
-	static void TransformCurve(PathRenderCmd* cmd)
+	static void TransformCurve(PathRenderCmd& cmd)
 	{
-		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd->pathIndexCmdType);
-		cmd->transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[0]);
-		cmd->transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[1]);
-		cmd->transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd->points[2]);
+		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
+		cmd.transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[0]);
+		cmd.transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[1]);
+		cmd.transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[2]);
 	}
 
 	static glm::vec2 GetPreviousPoint(const PathRender& path, uint32_t index)
@@ -183,7 +183,6 @@ namespace SvgRenderer {
 
 			ForEach(pathIndices.begin(), pathIndices.end(), [this](uint32_t pathIndex)
 			{
-				//Globals::AllPaths.paths[pathIndex].startTileIndex = 0;
 				Globals::AllPaths.paths[pathIndex].bbox.min = glm::vec2(std::numeric_limits<float>::max());
 				Globals::AllPaths.paths[pathIndex].bbox.max = glm::vec2(-std::numeric_limits<float>::max());
 			});
@@ -200,9 +199,49 @@ namespace SvgRenderer {
 			Timer timerTransform;
 			ForEach(indices.begin(), indices.end(), [](uint32_t cmdIndex)
 			{
-				TransformCurve(&Globals::AllPaths.commands[cmdIndex]);
+				TransformCurve(Globals::AllPaths.commands[cmdIndex]);
 			});
 			SR_TRACE("Transforming paths: {0} ms", timerTransform.ElapsedMillis());
+		}
+
+		// 1.5. step: Calculate first bounding box
+		{
+			std::vector<uint32_t> indices;
+			indices.resize(Globals::AllPaths.paths.size());
+			std::iota(indices.begin(), indices.end(), 0);
+
+			Timer timerCalcBbox;
+			ForEach(indices.begin(), indices.end(), [](uint32_t pathIndex)
+			{
+				PathRender& path = Globals::AllPaths.paths[pathIndex];
+				for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
+				{
+					const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
+					switch (GET_CMD_TYPE(cmd.pathIndexCmdType))
+					{
+					case MOVE_TO:
+					case LINE_TO:
+						path.bbox.AddPoint(cmd.transformedPoints[0]);
+						break;
+					case QUAD_TO:
+						path.bbox.AddPoint(cmd.transformedPoints[0]);
+						path.bbox.AddPoint(cmd.transformedPoints[1]);
+						break;
+					case CUBIC_TO:
+						path.bbox.AddPoint(cmd.transformedPoints[0]);
+						path.bbox.AddPoint(cmd.transformedPoints[1]);
+						path.bbox.AddPoint(cmd.transformedPoints[2]);
+						break;
+					default:
+						SR_ASSERT(false, "Unknown path type");
+						break;
+					}
+				}
+
+				path.bbox.AddPadding({ 1.0f, 1.0f });
+				path.isBboxVisible = Flattening::IsBboxInsideViewSpace(path.bbox);
+			});
+			SR_TRACE("Calculating first bbox: {0} ms", timerCalcBbox.ElapsedMillis());
 		}
 
 		// 2.step: Flattening
@@ -219,6 +258,12 @@ namespace SvgRenderer {
 			{
 				PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
 				uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
+				const PathRender& path = Globals::AllPaths.paths[pathIndex];
+				if (!path.isBboxVisible)
+				{
+					return;
+				}
+
 				glm::vec2 last = GetPreviousPoint(Globals::AllPaths.paths[pathIndex], cmdIndex);
 				uint32_t count = Flattening::CalculateNumberOfSimpleCommands(cmdIndex, last, TOLERANCE);
 				uint32_t currentCount = simpleCommandsCount.fetch_add(count);
@@ -240,6 +285,10 @@ namespace SvgRenderer {
 				PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
 				uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
 				const PathRender& path = Globals::AllPaths.paths[pathIndex];
+				if (!path.isBboxVisible)
+				{
+					return;
+				}
 
 				glm::vec2 last = GetPreviousPoint(path, cmdIndex);
 				std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE);
@@ -262,6 +311,13 @@ namespace SvgRenderer {
 			ForEach(indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
 			{
 				PathRender& path = Globals::AllPaths.paths[pathIndex];
+				if (!path.isBboxVisible)
+				{
+					return;
+				}
+
+				Globals::AllPaths.paths[pathIndex].bbox.min = glm::vec2(std::numeric_limits<float>::max());
+				Globals::AllPaths.paths[pathIndex].bbox.max = glm::vec2(-std::numeric_limits<float>::max());
 				for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
 				{
 					PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];

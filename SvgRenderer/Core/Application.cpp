@@ -419,7 +419,7 @@ namespace SvgRenderer {
 
 	static glm::vec2 ApplyTransform(const glm::mat4& transform, const glm::vec2& point)
 	{
-		return Globals::GlobalTransform * (transform * glm::vec4(point, 1.0f, 1.0f));
+		return Globals::GlobalTransform * transform * glm::vec4(point, 1.0f, 1.0f);
 	}
 
 	static void TransformCurve(PathRenderCmd* cmd)
@@ -478,7 +478,7 @@ namespace SvgRenderer {
 		Renderer::Init(Globals::WindowWidth, Globals::WindowHeight);
 
 		Timer timerParse;
-		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/tiger.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/paris.svg");
 		SR_TRACE("Parsing: {0} ms", timerParse.ElapsedMillis());
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -530,19 +530,24 @@ namespace SvgRenderer {
 		{
 			Timer timer;
 
+			HandleInput();
+
 			m_Pipeline->Render();
 			m_Pipeline->Final();
 			glFinish();
 
 			m_Window->OnUpdate();
 
-			HandleInput();
 			for (const Event& e : m_Window->GetAllEvents())
 			{
-				if (e.type == EventType::Resize)
+				switch (e.type)
 				{
+				case EventType::Close:
+					OnWindowClose();
+					break;
+				case EventType::Resize:
 					OnViewportResize(e.as.windowResizeEvent.width, e.as.windowResizeEvent.height);
-					SR_WARN("Resize {0} {1}", e.as.windowResizeEvent.width, e.as.windowResizeEvent.height);
+					break;
 				}
 			}
 			m_Window->ClearEvents();
