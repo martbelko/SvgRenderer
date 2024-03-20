@@ -453,11 +453,9 @@ namespace SvgRenderer {
 
 	void Application::Init()
 	{
-		uint32_t initWidth = Globals::WindowWidth, initHeight = Globals::WindowHeight;
-
 		m_Window = Window::Create({
-			.width = initWidth,
-			.height = initHeight,
+			.width = Globals::WindowWidth,
+			.height = Globals::WindowHeight,
 			.title = "SvgRenderer",
 			.callbacks = {
 				.onWindowClose = Application::OnWindowCloseStatic,
@@ -477,7 +475,7 @@ namespace SvgRenderer {
 
 		//SplitByClosestPoints(cb);
 
-		Renderer::Init(initWidth, initHeight);
+		Renderer::Init(Globals::WindowWidth, Globals::WindowHeight);
 
 		Timer timerParse;
 		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/tiger.svg");
@@ -497,8 +495,6 @@ namespace SvgRenderer {
 		Renderer::Shutdown();
 		m_Window->Close();
 	}
-
-	OrthographicCamera camera(0, 1280.0f, 0.0f, 720.0f, -100.0f, 100.0f);
 
 	void Application::HandleInput()
 	{
@@ -562,18 +558,6 @@ namespace SvgRenderer {
 
 	void Application::OnKeyPressed(int key, int repeat)
 	{
-		static glm::vec3 pos = { 0, 0, 0 };
-		static float scale = 1.0f;
-		if (key == GLFW_KEY_A)
-		{
-			pos.x += 1.0f;
-		}
-		else if (key == GLFW_KEY_D)
-		{
-			pos.x -= 1.0f;
-		}
-
-		Globals::GlobalTransform = glm::translate(glm::mat4(1.0f), pos) * glm::scale(glm::mat4(1.0f), glm::vec3(scale, scale, 1.0f));
 	}
 
 	void Application::OnKeyReleased(int key)
@@ -592,6 +576,7 @@ namespace SvgRenderer {
 	{
 		Globals::WindowWidth = width;
 		Globals::WindowHeight = height;
+		glViewport(0, 0, width, height);
 	}
 
 }
