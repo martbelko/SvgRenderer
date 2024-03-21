@@ -13,7 +13,7 @@
 
 namespace SvgRenderer {
 
-	class PathRenderCmd;
+	struct PathRenderCmd;
 
 	class Rasterizer
 	{

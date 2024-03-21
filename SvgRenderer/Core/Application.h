@@ -50,7 +50,7 @@ namespace SvgRenderer {
 		bool m_Running = false;
 		Scope<Window> m_Window;
 
-		Pipeline* m_Pipeline;
+		Pipeline* m_Pipeline = nullptr;
 	private:
 		static Application s_Instance;
 	};
