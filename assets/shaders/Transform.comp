@@ -3,7 +3,22 @@
 #define WG_SIZE 256
 layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
 
-#define GET_CMD_PATH_INDEX(value) (value >> 16)
+#define MOVE_TO 0
+#define LINE_TO 1
+#define QUAD_TO 2
+#define CUBIC_TO 3
+
+#define GET_CMD_PATH_INDEX(value) (value >> 8)
+#define GET_CMD_TYPE(value) (value & 0x000000FF)
+#define MAKE_CMD_PATH_INDEX(value, index) ((index << 8) | (value & 0x000000FF))
+#define MAKE_CMD_TYPE(value, type) (type | (value & 0xFFFFFF00))
+
+const float TOLERANCE = 0.05f; // Quality of flattening
+const uint TILE_SIZE = 16;
+const uint ATLAS_SIZE = 4096 * 2;
+
+const uint MAX_UINT = 4294967295;
+const float MAX_FLOAT = 3.40282347e+38F;
 
 struct BoundingBox
 {
@@ -38,16 +53,69 @@ struct Command
 	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
 };
 
-layout(location = 0) uniform mat4 u_GlobalTransform;
+struct SimpleCommand // Lines or moves only
+{
+	uint type;
+	uint cmdIndex;
+	vec2 point;
+};
 
-layout(std430, binding = 0) buffer Paths
+struct Increment
+{
+	int area;
+	int height;
+};
+
+struct Tile
+{
+	int winding;
+	uint nextTileIndex;
+	bool hasIncrements;
+	Increment[TILE_SIZE * TILE_SIZE] increments;
+};
+
+struct Vertex
+{
+	int pos[2];
+	uint uv[2];
+	uint color;
+};
+
+layout(std140, binding = 0) uniform Params
+{
+	mat4 globalTransform;
+	uint screenWidth;
+	uint screenHeight;
+};
+
+layout(std430, binding = 1) buffer Paths
 {
 	Path paths[];
 };
 
-layout(std430, binding = 1) buffer Commands
+layout(std430, binding = 2) buffer Commands
 {
 	Command commands[];
+};
+
+layout(std430, binding = 3) buffer SimpleCommands
+{
+	SimpleCommand simpleCommands[];
+};
+
+layout(std430, binding = 4) buffer Tiles
+{
+	Tile tiles[];
+};
+
+layout(std430, binding = 5) buffer Vertices
+{
+	Vertex vertices[];
+};
+
+layout(std430, binding = 6) buffer Atlas
+{
+	float atlas[];
 };
 
 void main()
@@ -62,7 +130,7 @@ void main()
 		vec2 p2 = cmd.points[1];
 		vec2 p3 = cmd.points[2];
 
-		mat4 trans = u_GlobalTransform * paths[pathIndex].transform;
+		mat4 trans = globalTransform * paths[pathIndex].transform;
 
 		vec2 v1 = (trans * vec4(p1, 1.0, 1.0)).xy;
 		vec2 v2 = (trans * vec4(p2, 1.0, 1.0)).xy;

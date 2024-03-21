@@ -110,8 +110,6 @@ namespace SvgRenderer {
 		glTextureParameteri(m_AlphaTexture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 		glTextureStorage2D(m_AlphaTexture, 1, GL_R32F, ATLAS_SIZE, ATLAS_SIZE);
 
-		m_FinalShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
-
 		glCreateBuffers(1, &m_Vbo);
 		glCreateBuffers(1, &m_Ibo);
 
@@ -133,8 +131,7 @@ namespace SvgRenderer {
 		glVertexArrayAttribFormat(m_Vao, 2, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16);
 		glVertexArrayAttribBinding(m_Vao, 2, 0);
 
-		m_ResetShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Reset.comp");
-
+		glCreateBuffers(1, &m_ParamsBuf);
 		glCreateBuffers(1, &m_PathsBuf);
 		glCreateBuffers(1, &m_CmdsBuf);
 		glCreateBuffers(1, &m_SimpleCmdsBuf);
@@ -143,6 +140,7 @@ namespace SvgRenderer {
 		glCreateBuffers(1, &m_AtlasBuf);
 
 		constexpr GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT | GL_DYNAMIC_STORAGE_BIT;
+		glNamedBufferStorage(m_ParamsBuf, sizeof(ParamsBuf), nullptr, GL_DYNAMIC_STORAGE_BIT);
 		glNamedBufferStorage(m_PathsBuf, Globals::AllPaths.paths.size() * sizeof(PathRender), Globals::AllPaths.paths.data(), bufferFlags);
 		glNamedBufferStorage(m_CmdsBuf, Globals::AllPaths.commands.size() * sizeof(PathRenderCmd), Globals::AllPaths.commands.data(), bufferFlags);
 		glNamedBufferStorage(m_SimpleCmdsBuf, Globals::AllPaths.simpleCommands.size() * sizeof(SimpleCommand), Globals::AllPaths.simpleCommands.data(), bufferFlags);
@@ -150,12 +148,17 @@ namespace SvgRenderer {
 		glNamedBufferStorage(m_VerticesBuf, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
 		glNamedBufferStorage(m_AtlasBuf, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
 
+		glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_ParamsBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_PathsBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_CmdsBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_SimpleCmdsBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_TilesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_VerticesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, m_AtlasBuf);
+
+		m_FinalShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
+		m_ResetShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Reset.comp");
+		m_TransformShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Transform.comp");
 	}
 
 	void GPUPipeline::Shutdown()
@@ -165,6 +168,7 @@ namespace SvgRenderer {
 		glDeleteVertexArrays(1, &m_Vao);
 		glDeleteTextures(1, &m_AlphaTexture);
 
+		glDeleteBuffers(1, &m_ParamsBuf);
 		glDeleteBuffers(1, &m_PathsBuf);
 		glDeleteBuffers(1, &m_CmdsBuf);
 		glDeleteBuffers(1, &m_SimpleCmdsBuf);
@@ -177,12 +181,18 @@ namespace SvgRenderer {
 	{
 		Timer globalTimer;
 
-		int maxSizeX;
-		int maxSizeY;
-		int maxSizeZ;
-		glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &maxSizeX);
-		glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &maxSizeY);
-		glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &maxSizeZ);
+		m_Params.globalTransform = Globals::GlobalTransform;
+		m_Params.screenWidth = Globals::WindowWidth;
+		m_Params.screenHeight = Globals::WindowHeight;
+
+		glNamedBufferSubData(m_ParamsBuf, 0, sizeof(ParamsBuf), &m_Params);
+
+		int maxWgCountX;
+		int maxWgCountY;
+		int maxWgCountZ;
+		glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &maxWgCountX);
+		glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &maxWgCountY);
+		glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &maxWgCountZ);
 
 		auto readData = [this]()
 		{
@@ -198,33 +208,39 @@ namespace SvgRenderer {
 
 		// 0.step: Reset all the data
 		{
+			Timer timer;
+
+			constexpr uint32_t wgSize = 256;
 			uint32_t threadsNeeded = std::max({ TILES_COUNT, VERTICES_COUNT, ATLAS_SIZE * ATLAS_SIZE, Globals::PathsCount });
-			uint32_t wgs = glm::ceil(threadsNeeded / 256.0f);
-			uint32_t ySize = glm::ceil(wgs / static_cast<float>(maxSizeX));
-			uint32_t xSize = ySize == 1 ? wgs : maxSizeX;
+			uint32_t wgs = glm::ceil(threadsNeeded / static_cast<float>(wgSize));
+			uint32_t ySize = glm::ceil(wgs / static_cast<float>(maxWgCountX));
+			uint32_t xSize = ySize == 1 ? wgs : maxWgCountX;
 
 			m_ResetShader->Bind();
 			m_ResetShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-			readData();
+			SR_TRACE("Reseting: {0} ms", timer.ElapsedMillis());
 		}
 
 		// 1.step: Transform the paths
 		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.commands.size());
-			std::iota(indices.begin(), indices.end(), 0);
+			Timer timer;
 
-			Timer timerTransform;
-			ForEach(indices.begin(), indices.end(), [](uint32_t cmdIndex)
-				{
-					TransformCurve(Globals::AllPaths.commands[cmdIndex]);
-				});
-			SR_TRACE("Transforming paths: {0} ms", timerTransform.ElapsedMillis());
+			constexpr uint32_t wgSize = 256;
+			const uint32_t xSize = glm::ceil(Globals::CommandsCount / static_cast<float>(wgSize));
+			const uint32_t ySize = glm::max(glm::ceil(static_cast<float>(xSize) / 65535.0f), 1.0f);
+
+			m_TransformShader->Bind();
+			m_TransformShader->Dispatch(xSize, ySize, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Transforming: {0} ms", timer.ElapsedMillis());
+
+			readData();
 		}
 
-		// 1.5. step: Calculate first bounding box
+		// 1.5. step: Calculate coarse bounding box
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.paths.size());
@@ -261,7 +277,7 @@ namespace SvgRenderer {
 					path.bbox.AddPadding({ 1.0f, 1.0f });
 					path.isBboxVisible = Flattening::IsBboxInsideViewSpace(path.bbox);
 				});
-			SR_TRACE("Calculating first bbox: {0} ms", timerCalcBbox.ElapsedMillis());
+			SR_TRACE("Calculating coarse bbox: {0} ms", timerCalcBbox.ElapsedMillis());
 		}
 
 		// 2.step: Flattening

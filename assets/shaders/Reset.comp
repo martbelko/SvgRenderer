@@ -81,6 +81,13 @@ struct Vertex
 	uint color;
 };
 
+layout(std140, binding = 0) uniform Params
+{
+	mat4 globalTransform;
+	uint screenWidth;
+	uint screenHeight;
+};
+
 layout(std430, binding = 1) buffer Paths
 {
 	Path paths[];

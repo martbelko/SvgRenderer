@@ -204,7 +204,7 @@ namespace SvgRenderer {
 			SR_TRACE("Transforming paths: {0} ms", timerTransform.ElapsedMillis());
 		}
 
-		// 1.5. step: Calculate first bounding box
+		// 1.5. step: Calculate coarse bounding box
 		{
 			std::vector<uint32_t> indices;
 			indices.resize(Globals::AllPaths.paths.size());
@@ -241,7 +241,7 @@ namespace SvgRenderer {
 				path.bbox.AddPadding({ 1.0f, 1.0f });
 				path.isBboxVisible = Flattening::IsBboxInsideViewSpace(path.bbox);
 			});
-			SR_TRACE("Calculating first bbox: {0} ms", timerCalcBbox.ElapsedMillis());
+			SR_TRACE("Calculating coarse bbox: {0} ms", timerCalcBbox.ElapsedMillis());
 		}
 
 		// 2.step: Flattening
