@@ -159,6 +159,7 @@ namespace SvgRenderer {
 		m_FinalShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
 		m_ResetShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Reset.comp");
 		m_TransformShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Transform.comp");
+		m_CoarseBboxShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CoarseBbox.comp");
 	}
 
 	void GPUPipeline::Shutdown()
@@ -229,55 +230,30 @@ namespace SvgRenderer {
 
 			constexpr uint32_t wgSize = 256;
 			const uint32_t xSize = glm::ceil(Globals::CommandsCount / static_cast<float>(wgSize));
-			const uint32_t ySize = glm::max(glm::ceil(static_cast<float>(xSize) / 65535.0f), 1.0f);
+			const uint32_t ySize = glm::max(glm::ceil(static_cast<float>(xSize) / maxWgCountX), 1.0f);
 
 			m_TransformShader->Bind();
 			m_TransformShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Transforming: {0} ms", timer.ElapsedMillis());
-
-			readData();
 		}
 
 		// 1.5. step: Calculate coarse bounding box
 		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.paths.size());
-			std::iota(indices.begin(), indices.end(), 0);
+			Timer timer;
 
-			Timer timerCalcBbox;
-			ForEach(indices.begin(), indices.end(), [](uint32_t pathIndex)
-				{
-					PathRender& path = Globals::AllPaths.paths[pathIndex];
-					for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
-					{
-						const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
-						switch (GET_CMD_TYPE(cmd.pathIndexCmdType))
-						{
-						case MOVE_TO:
-						case LINE_TO:
-							path.bbox.AddPoint(cmd.transformedPoints[0]);
-							break;
-						case QUAD_TO:
-							path.bbox.AddPoint(cmd.transformedPoints[0]);
-							path.bbox.AddPoint(cmd.transformedPoints[1]);
-							break;
-						case CUBIC_TO:
-							path.bbox.AddPoint(cmd.transformedPoints[0]);
-							path.bbox.AddPoint(cmd.transformedPoints[1]);
-							path.bbox.AddPoint(cmd.transformedPoints[2]);
-							break;
-						default:
-							SR_ASSERT(false, "Unknown path type");
-							break;
-						}
-					}
+			constexpr uint32_t wgSize = 256;
+			const uint32_t ySize = glm::max(glm::ceil(static_cast<float>(Globals::PathsCount) / maxWgCountX), 1.0f);
+			const uint32_t xSize = ySize == 1 ? Globals::PathsCount : maxWgCountX;
 
-					path.bbox.AddPadding({ 1.0f, 1.0f });
-					path.isBboxVisible = Flattening::IsBboxInsideViewSpace(path.bbox);
-				});
-			SR_TRACE("Calculating coarse bbox: {0} ms", timerCalcBbox.ElapsedMillis());
+			m_CoarseBboxShader->Bind();
+			m_CoarseBboxShader->Dispatch(xSize, ySize, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Calculating Coarse BBOX: {0} ms", timer.ElapsedMillis());
+
+			readData();
 		}
 
 		// 2.step: Flattening

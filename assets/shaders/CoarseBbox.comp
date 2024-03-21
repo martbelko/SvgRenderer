@@ -1,0 +1,288 @@
+#version 460 core
+
+#define WG_SIZE 256
+layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+#define MOVE_TO 0
+#define LINE_TO 1
+#define QUAD_TO 2
+#define CUBIC_TO 3
+
+#define GET_CMD_PATH_INDEX(value) (value >> 8)
+#define GET_CMD_TYPE(value) (value & 0x000000FF)
+#define MAKE_CMD_PATH_INDEX(value, index) ((index << 8) | (value & 0x000000FF))
+#define MAKE_CMD_TYPE(value, type) (type | (value & 0xFFFFFF00))
+
+const float TOLERANCE = 0.05f; // Quality of flattening
+const uint TILE_SIZE = 16;
+const uint ATLAS_SIZE = 4096 * 2;
+
+const uint MAX_UINT = 4294967295;
+const float MAX_FLOAT = 3.40282347e+38F;
+
+struct BoundingBox
+{
+	vec4 minmax;
+};
+
+struct Path
+{
+	uint startCmdIndex;
+	uint endCmdIndex;
+	uint startTileIndex;
+	uint endTileIndex;
+	mat4 transform;
+	BoundingBox bbox;
+	uint color;
+	uint startVisibleTileIndex;
+	uint startSpanQuadIndex;
+	uint startTileQuadIndex;
+	bool isBboxVisible;
+	uint _pad0;
+	uint _pad1;
+	uint _pad2;
+};
+
+struct Command
+{
+	uint pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
+	uint startIndexSimpleCommands;
+	uint endIndexSimpleCommands;
+	uint _pad0;
+	vec2 points[4]; // Maybe unused, but maximum 3 points for cubicTo
+	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
+};
+
+struct SimpleCommand // Lines or moves only
+{
+	uint type;
+	uint cmdIndex;
+	vec2 point;
+};
+
+struct Increment
+{
+	int area;
+	int height;
+};
+
+struct Tile
+{
+	int winding;
+	uint nextTileIndex;
+	bool hasIncrements;
+	Increment[TILE_SIZE * TILE_SIZE] increments;
+};
+
+struct Vertex
+{
+	int pos[2];
+	uint uv[2];
+	uint color;
+};
+
+layout(std140, binding = 0) uniform Params
+{
+	mat4 globalTransform;
+	uint screenWidth;
+	uint screenHeight;
+};
+
+layout(std430, binding = 1) buffer Paths
+{
+	Path paths[];
+};
+
+layout(std430, binding = 2) buffer Commands
+{
+	Command commands[];
+};
+
+layout(std430, binding = 3) buffer SimpleCommands
+{
+	SimpleCommand simpleCommands[];
+};
+
+layout(std430, binding = 4) buffer Tiles
+{
+	Tile tiles[];
+};
+
+layout(std430, binding = 5) buffer Vertices
+{
+	Vertex vertices[];
+};
+
+layout(std430, binding = 6) buffer Atlas
+{
+	float atlas[];
+};
+
+shared uint pathIndex;
+shared Path path;
+
+shared int bboxMinX;
+shared int bboxMinY;
+shared int bboxMaxX;
+shared int bboxMaxY;
+
+const int BBOX_MULT = 10;
+
+void BboxAddPoint(in vec2 point)
+{
+	atomicMin(bboxMinX, int(point.x * BBOX_MULT));
+	atomicMin(bboxMinY, int(point.y * BBOX_MULT));
+	atomicMax(bboxMaxX, int(point.x * BBOX_MULT));
+	atomicMax(bboxMaxY, int(point.y * BBOX_MULT));
+}
+
+const int INSIDE = 0; // 0000
+const int LEFT = 1;   // 0001
+const int RIGHT = 2;  // 0010
+const int BOTTOM = 4; // 0100
+const int TOP = 8;    // 1000
+
+int ComputeOutCode(in vec2 p)
+{
+	int code = INSIDE;
+
+	if (p.x < 0.0)
+		code |= LEFT;
+	else if (p.x > screenWidth)
+		code |= RIGHT;
+	if (p.y < 0.0)
+		code |= BOTTOM;
+	else if (p.y > screenHeight)
+		code |= TOP;
+
+	return code;
+}
+
+bool IsLineInsideViewSpace(in vec2 p0, in vec2 p1)
+{
+	int outcode0 = ComputeOutCode(p0);
+	int outcode1 = ComputeOutCode(p1);
+	bool accept = false;
+
+	while (true)
+	{
+		if (!bool(outcode0 | outcode1))
+		{
+			accept = true;
+			break;
+		}
+		else if (bool(outcode0 & outcode1))
+		{
+			break;
+		}
+		else
+		{
+			float x, y;
+			int outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
+			if (bool(outcodeOut & TOP))
+			{
+				x = p0.x + (p1.x - p0.x) * (screenHeight - p0.y) / (p1.y - p0.y);
+				y = screenHeight;
+			}
+			else if (bool(outcodeOut & BOTTOM))
+			{
+				x = p0.x + (p1.x - p0.x) * (-p0.y) / (p1.y - p0.y);
+				y = 0;
+			}
+			else if (bool(outcodeOut & RIGHT))
+			{
+				y = p0.y + (p1.y - p0.y) * (screenWidth - p0.x) / (p1.x - p0.x);
+				x = screenWidth;
+			}
+			else if (bool(outcodeOut & LEFT))
+			{
+				y = p0.y + (p1.y - p0.y) * (-p0.x) / (p1.x - p0.x);
+				x = 0;
+			}
+
+			if (bool(outcodeOut == outcode0))
+			{
+				p0.x = x;
+				p0.y = y;
+				outcode0 = ComputeOutCode(p0);
+			}
+			else
+			{
+				p1.x = x;
+				p1.y = y;
+				outcode1 = ComputeOutCode(p1);
+			}
+		}
+	}
+
+	return accept;
+}
+
+bool IsBboxInsideViewSpace(in BoundingBox bbox)
+{
+	vec2 p1 = vec2(bbox.minmax.x, bbox.minmax.w);
+	vec2 p2 = vec2(bbox.minmax.z, bbox.minmax.y);
+	return IsLineInsideViewSpace(bbox.minmax.xy, bbox.minmax.zw) || IsLineInsideViewSpace(p1, p2);
+}
+
+void main()
+{
+	if (gl_LocalInvocationIndex == 0)
+	{
+		pathIndex = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+		bboxMinX = 2147483647;
+		bboxMinY = 2147483647;
+		bboxMaxX = -2147483648;
+		bboxMaxY = -2147483648;
+
+		if (pathIndex < paths.length())
+		{
+			path = paths[pathIndex];
+		}
+	}
+
+	barrier();
+
+	if (pathIndex < paths.length())
+	{
+		for (uint cmdIndex = path.startCmdIndex + gl_LocalInvocationIndex; cmdIndex <= path.endCmdIndex; cmdIndex += WG_SIZE)
+		{
+			if (cmdIndex < commands.length())
+			{
+				Command cmd = commands[cmdIndex];
+				uint cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+				switch (cmdType)
+				{
+					case MOVE_TO:
+						BboxAddPoint(cmd.transformedPoints[0]);
+						break;
+					case LINE_TO:
+						BboxAddPoint(cmd.transformedPoints[0]);
+						break;
+					case QUAD_TO:
+						BboxAddPoint(cmd.transformedPoints[0]);
+						BboxAddPoint(cmd.transformedPoints[1]);
+						break;
+					case CUBIC_TO:
+						BboxAddPoint(cmd.transformedPoints[0]);
+						BboxAddPoint(cmd.transformedPoints[1]);
+						BboxAddPoint(cmd.transformedPoints[2]);
+						break;
+				}
+			}
+		}
+	}
+
+	barrier();
+
+	if (gl_LocalInvocationIndex == 0 && pathIndex < paths.length())
+	{
+		const float mult = 1.0 / BBOX_MULT;
+		path.bbox.minmax = vec4(bboxMinX * mult, bboxMinY * mult, bboxMaxX * mult, bboxMaxY * mult);
+		path.bbox.minmax += vec4(-1, -1, 1, 1);
+		path.isBboxVisible = IsBboxInsideViewSpace(path.bbox);
+
+		paths[pathIndex].bbox = path.bbox;
+		paths[pathIndex].isBboxVisible = path.isBboxVisible;
+	}
+}
