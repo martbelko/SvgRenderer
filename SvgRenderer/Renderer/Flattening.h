@@ -18,7 +18,7 @@ namespace SvgRenderer::Flattening {
 
 	glm::vec2 ProjectPointOntoScreenBoundary(glm::vec2 point);
 
-	std::vector<SimpleCommand> Flatten(uint32_t cmdIndex, glm::vec2 last, float tolerance);
+	void Flatten(uint32_t cmdIndex, const glm::vec2& last, float tolerance);
 	uint32_t CalculateNumberOfSimpleCommands(uint32_t cmdIndex, glm::vec2 last, float tolerance);
 
 	BoundingBox FlattenIntoArray(const PathRenderCmd& cmd, glm::vec2 last, float tolerance);

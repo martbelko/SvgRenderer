@@ -478,7 +478,7 @@ namespace SvgRenderer {
 		Renderer::Init(Globals::WindowWidth, Globals::WindowHeight);
 
 		Timer timerParse;
-		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/tiger.svg");
 		SR_TRACE("Parsing: {0} ms", timerParse.ElapsedMillis());
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -530,7 +530,7 @@ namespace SvgRenderer {
 		{
 			Timer timer;
 
-			HandleInput();
+			//HandleInput();
 
 			m_Pipeline->Render();
 			m_Pipeline->Final();

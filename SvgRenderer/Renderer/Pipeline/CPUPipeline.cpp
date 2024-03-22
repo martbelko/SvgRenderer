@@ -30,17 +30,17 @@ namespace SvgRenderer {
 			return glm::vec2(0, 0);
 		}
 
-		PathRenderCmd& rndCmd = Globals::AllPaths.commands[index - 1];
-		uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+		PathRenderCmd& prevCmd = Globals::AllPaths.commands[index - 1];
+		uint32_t pathType = GET_CMD_TYPE(prevCmd.pathIndexCmdType);
 		switch (pathType)
 		{
 		case MOVE_TO:
 		case LINE_TO:
-			return rndCmd.transformedPoints[0];
+			return prevCmd.transformedPoints[0];
 		case QUAD_TO:
-			return rndCmd.transformedPoints[1];
+			return prevCmd.transformedPoints[1];
 		case CUBIC_TO:
-			return rndCmd.transformedPoints[2];
+			return prevCmd.transformedPoints[2];
 		}
 	}
 
@@ -266,9 +266,9 @@ namespace SvgRenderer {
 
 				glm::vec2 last = GetPreviousPoint(Globals::AllPaths.paths[pathIndex], cmdIndex);
 				uint32_t count = Flattening::CalculateNumberOfSimpleCommands(cmdIndex, last, TOLERANCE);
-				uint32_t currentCount = simpleCommandsCount.fetch_add(count);
-				cmd.startIndexSimpleCommands = currentCount;
-				cmd.endIndexSimpleCommands = currentCount + count;
+				uint32_t oldCount = simpleCommandsCount.fetch_add(count);
+				cmd.startIndexSimpleCommands = oldCount;
+				cmd.endIndexSimpleCommands = oldCount + count;
 			});
 			SR_TRACE("Pre-flatten: {0} ms", timerPreFlatten.ElapsedMillis());
 		}
@@ -291,12 +291,7 @@ namespace SvgRenderer {
 				}
 
 				glm::vec2 last = GetPreviousPoint(path, cmdIndex);
-				std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE);
-				for (uint32_t i = 0; i < simpleCmds.size(); i++)
-				{
-					Globals::AllPaths.simpleCommands[cmd.startIndexSimpleCommands + i] = simpleCmds[i];
-					Globals::AllPaths.simpleCommands[cmd.startIndexSimpleCommands + i].cmdIndex = cmdIndex;
-				}
+				Flattening::Flatten(cmdIndex, last, TOLERANCE);
 			});
 			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
 		}

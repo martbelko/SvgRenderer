@@ -223,7 +223,7 @@ namespace SvgRenderer::Flattening {
 		return glm::vec2(xCoord, -1);
 	}
 
-	static std::vector<glm::vec2> CalculateClosestDistanceScreenBoundary(const glm::vec2& from, const glm::vec2& to)
+	static uint32_t CalculateClosestDistanceScreenBoundary(const glm::vec2& from, const glm::vec2& to, std::array<glm::vec2, 3>& path)
 	{
 		auto isPointOnBoundary = [](glm::vec2 p)
 		{
@@ -233,8 +233,7 @@ namespace SvgRenderer::Flattening {
 		SR_ASSERT(isPointOnBoundary(from));
 		SR_ASSERT(isPointOnBoundary(to));
 
-		std::vector<glm::vec2> path;
-		path.push_back(from);
+		path[0] = from;
 
 		// If they are on the same line on the boundary
 		if ((from.x == -1.0f && to.x == -1.0f) ||
@@ -242,8 +241,8 @@ namespace SvgRenderer::Flattening {
 			(from.y == -1.0f && to.y == -1.0f) ||
 			(from.y == Globals::WindowHeight && to.y == Globals::WindowHeight))
 		{
-			path.push_back(to);
-			return path;
+			path[1] = to;
+			return 2;
 		}
 
 		// If the point 'from' is on the top or bottom boundary
@@ -251,28 +250,30 @@ namespace SvgRenderer::Flattening {
 		{
 			if (to.x > from.x)
 			{
-				path.push_back(glm::vec2(Globals::WindowWidth, from.y));
+				path[1] = glm::vec2(Globals::WindowWidth, from.y);
 			}
 			else
 			{
-				path.push_back(glm::vec2(-1.0f, from.y));
+				path[1] = glm::vec2(-1.0f, from.y);
 			}
 
-			path.push_back(to);
+			path[2] = to;
 		}
 		else // Point 'from' is on the left or right boundary
 		{
 			if (to.y > from.y)
 			{
-				path.push_back(glm::vec2(from.x, Globals::WindowHeight));
+				path[1] = glm::vec2(from.x, Globals::WindowHeight);
 			}
 			else
 			{
-				path.push_back(glm::vec2(from.x, -1.0f));
+				path[1] = glm::vec2(from.x, -1.0f);
 			}
+
+			path[2] = to;
 		}
 
-		return path;
+		return 3;
 	}
 
 	struct Segment
@@ -322,10 +323,10 @@ namespace SvgRenderer::Flattening {
 		std::array<glm::vec2, 4> ints;
 
 		uint32_t bits = 0;
-		bits |= LineLineIntersection(segLow, seg, ints[0]) << 0;
-		bits |= LineLineIntersection(segUp, seg, ints[1]) << 1;
-		bits |= LineLineIntersection(segLeft, seg, ints[2]) << 2;
-		bits |= LineLineIntersection(segRight, seg, ints[3]) << 3;
+		bits |= static_cast<uint32_t>(LineLineIntersection(segLow, seg, ints[0])) << 0;
+		bits |= static_cast<uint32_t>(LineLineIntersection(segUp, seg, ints[1])) << 1;
+		bits |= static_cast<uint32_t>(LineLineIntersection(segLeft, seg, ints[2])) << 2;
+		bits |= static_cast<uint32_t>(LineLineIntersection(segRight, seg, ints[3])) << 3;
 
 		if (bits == 0)
 		{
@@ -369,7 +370,8 @@ namespace SvgRenderer::Flattening {
 	{
 		float xd = glm::abs(vec1.x - vec2.x);
 		float yd = glm::abs(vec1.y - vec2.y);
-		return (glm::abs(vec1.x - vec2.x) <= tolerance) && (glm::abs(vec1.y - vec2.y) <= tolerance);
+		//return (glm::abs(vec1.x - vec2.x) <= tolerance) && (glm::abs(vec1.y - vec2.y) <= tolerance);
+		return false;
 	}
 
 	static uint32_t HandleLineNumberOfSimpleCommands(glm::vec2 last, glm::vec2 point, bool wasLastMove)
@@ -379,9 +381,7 @@ namespace SvgRenderer::Flattening {
 			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point) && IsLineInsideViewSpace(last, point))
 			{
 				glm::vec2 intersectionNear, intersectionFar;
-				uint32_t count = FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersectionNear, intersectionFar);
-				SR_ASSERT(count == 2);
-
+				SR_ASSERT(FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersectionNear, intersectionFar) == 2);
 				return 2;
 			}
 
@@ -389,14 +389,13 @@ namespace SvgRenderer::Flattening {
 			{
 				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
 				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
-
 				if (IsEqual(lastProjected, pointProjected))
 				{
 					return 1;
 				}
 
-				std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
-				return static_cast<uint32_t>(points.size());
+				std::array<glm::vec2, 3> points{};
+				return CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected, points);
 			}
 			else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
 			{
@@ -448,8 +447,8 @@ namespace SvgRenderer::Flattening {
 				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
 				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
 
-				std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
-				return static_cast<uint32_t>(points.size() - 1);
+				std::array<glm::vec2, 3> points{};
+				return CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected, points) - 1;
 			}
 			else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
 			{
@@ -481,7 +480,7 @@ namespace SvgRenderer::Flattening {
 		}
 	}
 
-	static void HandleLine(glm::vec2 last, glm::vec2 point, bool wasLastMove, std::vector<SimpleCommand>& simpleCmds)
+	static uint32_t HandleLine(uint32_t simpleCmdIndex, glm::vec2 last, glm::vec2 point, bool wasLastMove)
 	{
 		if (wasLastMove)
 		{
@@ -491,28 +490,30 @@ namespace SvgRenderer::Flattening {
 				uint32_t count = FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersectionNear, intersectionFar);
 				SR_ASSERT(count == 2);
 
-				simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = intersectionNear });
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersectionFar });
-				return;
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = MOVE_TO, .point = intersectionNear };
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 1] = SimpleCommand{ .type = LINE_TO, .point = intersectionFar };
+				return 2;
 			}
 
 			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
 			{
 				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
 				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
-
 				if (IsEqual(lastProjected, pointProjected))
 				{
-					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
-					return;
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = MOVE_TO, .point = lastProjected };
+					return 1;
 				}
 
-				std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
-				simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
-				for (uint32_t i = 1; i < points.size(); i++)
+				std::array<glm::vec2, 3> points{};
+				uint32_t count = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected, points);
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = MOVE_TO, .point = lastProjected };
+				for (uint32_t i = 1; i < count; i++)
 				{
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = points[i] });
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + i] = SimpleCommand{ .type = LINE_TO, .point = points[i] };
 				}
+
+				return count;
 			}
 			else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
 			{
@@ -521,14 +522,15 @@ namespace SvgRenderer::Flattening {
 				FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersection, intersection);
 				if (IsEqual(lastProjected, intersection))
 				{
-					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-					return;
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = MOVE_TO, .point = lastProjected };
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + 1] = SimpleCommand{ .type = LINE_TO, .point = intersection };
+					return 2;
 				}
 
-				simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = lastProjected });
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = MOVE_TO, .point = lastProjected };
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 1] = SimpleCommand{ .type = LINE_TO, .point = intersection };
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 2] = SimpleCommand{ .type = LINE_TO, .point = point };
+				return 3;
 			}
 			else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
 			{
@@ -537,25 +539,27 @@ namespace SvgRenderer::Flattening {
 				FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersection, intersection);
 				if (IsEqual(intersection, pointProjected))
 				{
-					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-					return;
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = MOVE_TO, .point = last };
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + 1] = SimpleCommand{ .type = LINE_TO, .point = intersection };
+					return 2;
 				}
 
-				simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = pointProjected });
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = MOVE_TO, .point = last };
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 1] = SimpleCommand{ .type = LINE_TO, .point = intersection };
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 2] = SimpleCommand{ .type = LINE_TO, .point = pointProjected };
+				return 3;
 			}
 			else
 			{
 				if (IsEqual(last, point))
 				{
-					simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
-					return;
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = MOVE_TO, .point = last };
+					return 1;
 				}
 
-				simpleCmds.push_back(SimpleCommand{ .type = MOVE_TO, .point = last });
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = MOVE_TO, .point = last };
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 1] = SimpleCommand{ .type = LINE_TO, .point = point };
+				return 2;
 			}
 		}
 		else
@@ -566,9 +570,9 @@ namespace SvgRenderer::Flattening {
 				uint32_t count = FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersectionNear, intersectionFar);
 				SR_ASSERT(count == 2);
 
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersectionNear });
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersectionFar });
-				return;
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = LINE_TO, .point = intersectionNear };
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 1] = SimpleCommand{ .type = LINE_TO, .point = intersectionFar };
+				return 2;
 			}
 
 			if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
@@ -576,11 +580,14 @@ namespace SvgRenderer::Flattening {
 				glm::vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
 				glm::vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
 
-				std::vector<glm::vec2> points = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected);
-				for (uint32_t i = 1; i < points.size(); i++)
+				std::array<glm::vec2, 3> points{};
+				uint32_t count = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected, points);
+				for (uint32_t i = 1; i < count; i++)
 				{
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = points[i] });
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + i - 1] = SimpleCommand{ .type = LINE_TO, .point = points[i] };
 				}
+
+				return count - 1;
 			}
 			else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
 			{
@@ -588,12 +595,13 @@ namespace SvgRenderer::Flattening {
 				FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersection, intersection);
 				if (IsEqual(intersection, point))
 				{
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-					return;
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = LINE_TO, .point = intersection };
+					return 1;
 				}
 
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = LINE_TO, .point = intersection };
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 1] = SimpleCommand{ .type = LINE_TO, .point = point };
+				return 2;
 			}
 			else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
 			{
@@ -602,24 +610,24 @@ namespace SvgRenderer::Flattening {
 				FindIntersectionWithScreen(Segment{ .p1 = last, .p2 = point }, intersection, intersection);
 				if (IsEqual(intersection, pointProjected))
 				{
-					simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-					return;
+					Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = LINE_TO, .point = intersection };
+					return 1;
 				}
 
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = intersection });
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = pointProjected });
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = LINE_TO, .point = intersection };
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 1] = SimpleCommand{ .type = LINE_TO, .point = pointProjected };
+				return 2;
 			}
 			else
 			{
-				simpleCmds.push_back(SimpleCommand{ .type = LINE_TO, .point = point });
+				Globals::AllPaths.simpleCommands[simpleCmdIndex + 0] = SimpleCommand{ .type = LINE_TO, .point = point };
+				return 1;
 			}
 		}
 	}
 
 	uint32_t CalculateNumberOfSimpleCommands(uint32_t cmdIndex, glm::vec2 last, float tolerance)
 	{
-		std::vector<SimpleCommand> simpleCmds;
-
 		const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
 		uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
 		if (cmdType == MOVE_TO)
@@ -709,15 +717,13 @@ namespace SvgRenderer::Flattening {
 		return 0;
 	}
 
-	std::vector<SvgRenderer::SimpleCommand> Flatten(uint32_t cmdIndex, glm::vec2 last, float tolerance)
+	void Flatten(uint32_t cmdIndex, const glm::vec2& last, float tolerance)
 	{
-		std::vector<SimpleCommand> simpleCmds;
-
 		const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
 		uint32_t cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
 		if (cmdType == MOVE_TO)
 		{
-			return {};
+			return;
 		}
 
 		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
@@ -736,7 +742,7 @@ namespace SvgRenderer::Flattening {
 		case LINE_TO:
 		{
 			glm::vec2 point = cmd.transformedPoints[0];
-			HandleLine(last, point, wasLastMove, simpleCmds);
+			HandleLine(cmd.startIndexSimpleCommands, last, point, wasLastMove);
 			break;
 		}
 		case QUAD_TO:
@@ -745,6 +751,7 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p2 = cmd.transformedPoints[1];
 
 			glm::vec2 lastFlattened = last;
+			uint32_t simpleCmdIndex = cmd.startIndexSimpleCommands;
 
 			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * p1 + p2)));
 			float t = 0.0f;
@@ -755,7 +762,7 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p12 = glm::lerp(p1, p2, t);
 				const glm::vec2 point = glm::lerp(p01, p12, t);
 
-				HandleLine(lastFlattened, point, wasLastMove, simpleCmds);
+				simpleCmdIndex += HandleLine(simpleCmdIndex, lastFlattened, point, wasLastMove);
 				lastFlattened = point;
 				wasLastMove = false;
 			}
@@ -769,6 +776,7 @@ namespace SvgRenderer::Flattening {
 			const glm::vec2& p3 = cmd.transformedPoints[2];
 
 			glm::vec2 lastFlattened = last;
+			uint32_t simpleCmdIndex = cmd.startIndexSimpleCommands;
 
 			const glm::vec2 a = -1.0f * last + 3.0f * p1 - 3.0f * p2 + p3;
 			const glm::vec2 b = 3.0f * (last - 2.0f * p1 + p2);
@@ -785,7 +793,7 @@ namespace SvgRenderer::Flattening {
 				const glm::vec2 p123 = glm::lerp(p12, p23, t);
 				const glm::vec2 point = glm::lerp(p012, p123, t);
 
-				HandleLine(lastFlattened, point, wasLastMove, simpleCmds);
+				simpleCmdIndex += HandleLine(simpleCmdIndex, lastFlattened, point, wasLastMove);
 				lastFlattened = point;
 				wasLastMove = false;
 			}
@@ -796,8 +804,6 @@ namespace SvgRenderer::Flattening {
 			SR_ASSERT(false, "Unknown path type");
 			break;
 		}
-
-		return simpleCmds;
 	}
 
 }

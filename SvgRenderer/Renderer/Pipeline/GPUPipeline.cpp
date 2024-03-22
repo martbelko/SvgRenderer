@@ -30,17 +30,17 @@ namespace SvgRenderer {
 			return glm::vec2(0, 0);
 		}
 
-		PathRenderCmd& rndCmd = Globals::AllPaths.commands[index - 1];
-		uint32_t pathType = GET_CMD_TYPE(rndCmd.pathIndexCmdType);
+		PathRenderCmd& prevCmd = Globals::AllPaths.commands[index - 1];
+		uint32_t pathType = GET_CMD_TYPE(prevCmd.pathIndexCmdType);
 		switch (pathType)
 		{
 		case MOVE_TO:
 		case LINE_TO:
-			return rndCmd.transformedPoints[0];
+			return prevCmd.transformedPoints[0];
 		case QUAD_TO:
-			return rndCmd.transformedPoints[1];
+			return prevCmd.transformedPoints[1];
 		case CUBIC_TO:
-			return rndCmd.transformedPoints[2];
+			return prevCmd.transformedPoints[2];
 		}
 	}
 
@@ -138,6 +138,7 @@ namespace SvgRenderer {
 		glCreateBuffers(1, &m_TilesBuf);
 		glCreateBuffers(1, &m_VerticesBuf);
 		glCreateBuffers(1, &m_AtlasBuf);
+		glCreateBuffers(1, &m_TempBuf);
 
 		constexpr GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT | GL_DYNAMIC_STORAGE_BIT;
 		glNamedBufferStorage(m_ParamsBuf, sizeof(ParamsBuf), nullptr, GL_DYNAMIC_STORAGE_BIT);
@@ -147,6 +148,7 @@ namespace SvgRenderer {
 		glNamedBufferStorage(m_TilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
 		glNamedBufferStorage(m_VerticesBuf, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
 		glNamedBufferStorage(m_AtlasBuf, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
+		glNamedBufferStorage(m_TempBuf, sizeof(uint32_t), nullptr, bufferFlags);
 
 		glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_ParamsBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_PathsBuf);
@@ -155,11 +157,14 @@ namespace SvgRenderer {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_TilesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_VerticesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, m_AtlasBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, m_TempBuf);
 
 		m_FinalShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
 		m_ResetShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Reset.comp");
 		m_TransformShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Transform.comp");
 		m_CoarseBboxShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CoarseBbox.comp");
+		m_PreFlattenShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFlatten.comp");
+		m_FlattenShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Flatten.comp");
 	}
 
 	void GPUPipeline::Shutdown()
@@ -176,6 +181,7 @@ namespace SvgRenderer {
 		glDeleteBuffers(1, &m_TilesBuf);
 		glDeleteBuffers(1, &m_VerticesBuf);
 		glDeleteBuffers(1, &m_AtlasBuf);
+		glDeleteBuffers(1, &m_TempBuf);
 	}
 
 	void GPUPipeline::Render()
@@ -207,7 +213,7 @@ namespace SvgRenderer {
 			SR_WARN("Reading data: {0} ms", timerCopy.ElapsedMillis());
 		};
 
-		// 0.step: Reset all the data
+		// 1.step: Reset all the data
 		{
 			Timer timer;
 
@@ -224,7 +230,7 @@ namespace SvgRenderer {
 			SR_TRACE("Reseting: {0} ms", timer.ElapsedMillis());
 		}
 
-		// 1.step: Transform the paths
+		// 2.step: Transform the paths
 		{
 			Timer timer;
 
@@ -239,7 +245,7 @@ namespace SvgRenderer {
 			SR_TRACE("Transforming: {0} ms", timer.ElapsedMillis());
 		}
 
-		// 1.5. step: Calculate coarse bounding box
+		// 3. step: Calculate coarse bounding box
 		{
 			Timer timer;
 
@@ -252,65 +258,40 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Calculating Coarse BBOX: {0} ms", timer.ElapsedMillis());
+		}
+
+		// 4.step: Calculate number of simple commands for each path command and their indices (for flattening)
+		{
+			Timer timer;
+
+			constexpr uint32_t wgSize = 256;
+			uint32_t wgs = glm::ceil(Globals::CommandsCount / static_cast<float>(wgSize));
+			uint32_t ySize = glm::ceil(wgs / static_cast<float>(maxWgCountX));
+			uint32_t xSize = ySize == 1 ? wgs : maxWgCountX;
+
+			m_PreFlattenShader->Bind();
+			m_PreFlattenShader->Dispatch(xSize, ySize, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Pre-flatten: {0} ms", timer.ElapsedMillis());
+		}
+
+		// 5.step: Actually flatten all the commands
+		{
+			Timer timer;
+
+			constexpr uint32_t wgSize = 256;
+			uint32_t wgs = glm::ceil(Globals::CommandsCount / static_cast<float>(wgSize));
+			uint32_t ySize = glm::ceil(wgs / static_cast<float>(maxWgCountX));
+			uint32_t xSize = ySize == 1 ? wgs : maxWgCountX;
+
+			m_FlattenShader->Bind();
+			m_FlattenShader->Dispatch(xSize, ySize, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Flattening: {0} ms", timer.ElapsedMillis());
 
 			readData();
-		}
-
-		// 2.step: Flattening
-		// 2.1. Calculate number of simple commands for each path command and their indices
-		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.commands.size());
-			std::iota(indices.begin(), indices.end(), 0);
-
-			Timer timerPreFlatten;
-
-			std::atomic_uint32_t simpleCommandsCount = 0;
-			ForEach(indices.begin(), indices.end(), [&simpleCommandsCount](uint32_t cmdIndex)
-				{
-					PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
-					uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
-					const PathRender& path = Globals::AllPaths.paths[pathIndex];
-					if (!path.isBboxVisible)
-					{
-						return;
-					}
-
-					glm::vec2 last = GetPreviousPoint(Globals::AllPaths.paths[pathIndex], cmdIndex);
-					uint32_t count = Flattening::CalculateNumberOfSimpleCommands(cmdIndex, last, TOLERANCE);
-					uint32_t currentCount = simpleCommandsCount.fetch_add(count);
-					cmd.startIndexSimpleCommands = currentCount;
-					cmd.endIndexSimpleCommands = currentCount + count;
-				});
-			SR_TRACE("Pre-flatten: {0} ms", timerPreFlatten.ElapsedMillis());
-		}
-
-		// 2.2. Actually flatten all the commands
-		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.commands.size());
-			std::iota(indices.begin(), indices.end(), 0);
-
-			Timer timerFlatten;
-			ForEach(indices.begin(), indices.end(), [](uint32_t cmdIndex)
-				{
-					PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex];
-					uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
-					const PathRender& path = Globals::AllPaths.paths[pathIndex];
-					if (!path.isBboxVisible)
-					{
-						return;
-					}
-
-					glm::vec2 last = GetPreviousPoint(path, cmdIndex);
-					std::vector<SimpleCommand> simpleCmds = Flattening::Flatten(cmdIndex, last, TOLERANCE);
-					for (uint32_t i = 0; i < simpleCmds.size(); i++)
-					{
-						Globals::AllPaths.simpleCommands[cmd.startIndexSimpleCommands + i] = simpleCmds[i];
-						Globals::AllPaths.simpleCommands[cmd.startIndexSimpleCommands + i].cmdIndex = cmdIndex;
-					}
-				});
-			SR_TRACE("Flattening: {0} ms", timerFlatten.ElapsedMillis());
 		}
 
 		// 3.step: Calculating BBOX
