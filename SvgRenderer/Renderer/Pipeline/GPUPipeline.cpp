@@ -165,6 +165,7 @@ namespace SvgRenderer {
 		m_CoarseBboxShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CoarseBbox.comp");
 		m_PreFlattenShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFlatten.comp");
 		m_FlattenShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Flatten.comp");
+		m_CalcBboxShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CalcBbox.comp");
 	}
 
 	void GPUPipeline::Shutdown()
@@ -245,7 +246,7 @@ namespace SvgRenderer {
 			SR_TRACE("Transforming: {0} ms", timer.ElapsedMillis());
 		}
 
-		// 3. step: Calculate coarse bounding box
+		// 3.step: Calculate coarse bounding box
 		{
 			Timer timer;
 
@@ -294,39 +295,21 @@ namespace SvgRenderer {
 			readData();
 		}
 
-		// 3.step: Calculating BBOX
+		// 6.step: Calculating BBOX
 		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.paths.size());
-			std::iota(indices.begin(), indices.end(), 0);
+			Timer timer;
 
-			Timer timerBbox;
-			ForEach(indices.cbegin(), indices.cend(), [](uint32_t pathIndex)
-				{
-					PathRender& path = Globals::AllPaths.paths[pathIndex];
-					if (!path.isBboxVisible)
-					{
-						return;
-					}
+			uint32_t ySize = glm::ceil(Globals::PathsCount / static_cast<float>(maxWgCountX));
+			uint32_t xSize = ySize == 1 ? Globals::PathsCount : maxWgCountX;
 
-					Globals::AllPaths.paths[pathIndex].bbox.min = glm::vec2(std::numeric_limits<float>::max());
-					Globals::AllPaths.paths[pathIndex].bbox.max = glm::vec2(-std::numeric_limits<float>::max());
-					for (uint32_t cmdIndex = path.startCmdIndex; cmdIndex <= path.endCmdIndex; cmdIndex++)
-					{
-						PathRenderCmd& rndCmd = Globals::AllPaths.commands[cmdIndex];
-						for (uint32_t i = rndCmd.startIndexSimpleCommands; i < rndCmd.endIndexSimpleCommands; i++)
-						{
-							path.bbox.AddPoint(Globals::AllPaths.simpleCommands[i].point);
-						}
-					}
+			m_CalcBboxShader->Bind();
+			m_CalcBboxShader->Dispatch(xSize, ySize, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-					path.bbox.AddPadding({ 1.0f, 1.0f });
-					path.isBboxVisible = Flattening::IsBboxInsideViewSpace(path.bbox);
-				});
-			SR_TRACE("Calculating BBOX: {0} ms", timerBbox.ElapsedMillis());
+			SR_TRACE("Calculating BBOX: {0} ms", timer.ElapsedMillis());
+
+			readData();
 		}
-
-		// 4.step: The rest
 
 		// 4.1: Calculate correct tile indices for each path according to its bounding box
 		{

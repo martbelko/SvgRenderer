@@ -1,0 +1,715 @@
+#version 460 core
+
+#define WG_SIZE 256
+layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+#define MOVE_TO 0
+#define LINE_TO 1
+#define QUAD_TO 2
+#define CUBIC_TO 3
+
+#define GET_CMD_PATH_INDEX(value) (value >> 8)
+#define GET_CMD_TYPE(value) (value & 0x000000FF)
+#define MAKE_CMD_PATH_INDEX(value, index) ((index << 8) | (value & 0x000000FF))
+#define MAKE_CMD_TYPE(value, type) (type | (value & 0xFFFFFF00))
+
+const float TOLERANCE = 0.05; // Quality of flattening
+const uint TILE_SIZE = 16;
+const uint ATLAS_SIZE = 4096 * 2;
+
+const uint MAX_UINT = 4294967295;
+const float MAX_FLOAT = 3.40282347e+38F;
+
+struct BoundingBox
+{
+	vec4 minmax;
+};
+
+struct Path
+{
+	uint startCmdIndex;
+	uint endCmdIndex;
+	uint startTileIndex;
+	uint endTileIndex;
+	mat4 transform;
+	BoundingBox bbox;
+	uint color;
+	uint startVisibleTileIndex;
+	uint startSpanQuadIndex;
+	uint startTileQuadIndex;
+	bool isBboxVisible;
+	uint _pad0;
+	uint _pad1;
+	uint _pad2;
+};
+
+struct Command
+{
+	uint pathIndexCmdType; // 16 bits pathIndex, 8 bits curve type, 8 bits unused, GET_CMD_PATH_INDEX, GET_CMD_TYPE, MAKE_CMD_PATH_INDEX, MAKE_CMD_TYPE
+	uint startIndexSimpleCommands;
+	uint endIndexSimpleCommands;
+	uint _pad0;
+	vec2 points[4]; // Maybe unused, but maximum 3 points for cubicTo
+	vec2 transformedPoints[4]; // Maybe unused, but maximum 3 points for cubicTo
+};
+
+struct SimpleCommand // Lines or moves only
+{
+	uint type;
+	uint cmdIndex;
+	vec2 point;
+};
+
+struct Increment
+{
+	int area;
+	int height;
+};
+
+struct Tile
+{
+	int winding;
+	uint nextTileIndex;
+	bool hasIncrements;
+	Increment[TILE_SIZE * TILE_SIZE] increments;
+};
+
+struct Vertex
+{
+	int pos[2];
+	uint uv[2];
+	uint color;
+};
+
+layout(std140, binding = 0) uniform Params
+{
+	mat4 globalTransform;
+	uint screenWidth;
+	uint screenHeight;
+};
+
+layout(std430, binding = 1) buffer Paths
+{
+	Path paths[];
+};
+
+layout(std430, binding = 2) buffer Commands
+{
+	Command commands[];
+};
+
+layout(std430, binding = 3) buffer SimpleCommands
+{
+	SimpleCommand simpleCommands[];
+};
+
+layout(std430, binding = 4) buffer Tiles
+{
+	Tile tiles[];
+};
+
+layout(std430, binding = 5) buffer Vertices
+{
+	Vertex vertices[];
+};
+
+layout(std430, binding = 6) buffer Atlas
+{
+	float atlas[];
+};
+
+layout(std430, binding = 7) buffer Temp
+{
+	uint atomicPreFlattenCounter;
+};
+
+vec2 lerp(in vec2 v0, in vec2 v1, float t)
+{
+	return (1.0 - t) * v0 + t * v1;
+}
+
+bool IsPointInsideViewSpace(in vec2 v)
+{
+	return !(v.x > screenWidth || v.x < -1.0 || v.y > screenHeight || v.y < -1.0);
+}
+
+const int INSIDE = 0; // 0000
+const int LEFT = 1;   // 0001
+const int RIGHT = 2;  // 0010
+const int BOTTOM = 4; // 0100
+const int TOP = 8;    // 1000
+
+int ComputeOutCode(in vec2 p)
+{
+	int code = INSIDE;
+
+	if (p.x < 0.0)
+		code |= LEFT;
+	else if (p.x > screenWidth)
+		code |= RIGHT;
+	if (p.y < 0.0)
+		code |= BOTTOM;
+	else if (p.y > screenHeight)
+		code |= TOP;
+
+	return code;
+}
+
+bool IsLineInsideViewSpace(in vec2 p0, in vec2 p1)
+{
+	int outcode0 = ComputeOutCode(p0);
+	int outcode1 = ComputeOutCode(p1);
+	bool accept = false;
+
+	while (true)
+	{
+		if (!bool(outcode0 | outcode1))
+		{
+			accept = true;
+			break;
+		}
+		else if (bool(outcode0 & outcode1))
+		{
+			break;
+		}
+		else
+		{
+			float x, y;
+			int outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
+			if (bool(outcodeOut & TOP))
+			{
+				x = p0.x + (p1.x - p0.x) * (screenHeight - p0.y) / (p1.y - p0.y);
+				y = screenHeight;
+			}
+			else if (bool(outcodeOut & BOTTOM))
+			{
+				x = p0.x + (p1.x - p0.x) * (-p0.y) / (p1.y - p0.y);
+				y = 0;
+			}
+			else if (bool(outcodeOut & RIGHT))
+			{
+				y = p0.y + (p1.y - p0.y) * (screenWidth - p0.x) / (p1.x - p0.x);
+				x = screenWidth;
+			}
+			else if (bool(outcodeOut & LEFT))
+			{
+				y = p0.y + (p1.y - p0.y) * (-p0.x) / (p1.x - p0.x);
+				x = 0;
+			}
+
+			if (bool(outcodeOut == outcode0))
+			{
+				p0.x = x;
+				p0.y = y;
+				outcode0 = ComputeOutCode(p0);
+			}
+			else
+			{
+				p1.x = x;
+				p1.y = y;
+				outcode1 = ComputeOutCode(p1);
+			}
+		}
+	}
+
+	return accept;
+}
+
+bool IsBboxInsideViewSpace(in BoundingBox bbox)
+{
+	if (bbox.minmax.x > bbox.minmax.z)
+	{
+		return false;
+	}
+
+	vec2 p1 = vec2(bbox.minmax.x, bbox.minmax.w);
+	vec2 p2 = vec2(bbox.minmax.z, bbox.minmax.y);
+	return IsLineInsideViewSpace(bbox.minmax.xy, bbox.minmax.zw) || IsLineInsideViewSpace(p1, p2);
+}
+
+vec2 GetPreviousPoint(in Path path, uint cmdIndex)
+{
+	if (cmdIndex == path.startCmdIndex)
+	{
+		return vec2(0, 0);
+	}
+
+	Command prevCmd = commands[cmdIndex - 1];
+	uint pathType = GET_CMD_TYPE(prevCmd.pathIndexCmdType);
+	switch (pathType)
+	{
+	case MOVE_TO:
+	case LINE_TO:
+		return prevCmd.transformedPoints[0];
+	case QUAD_TO:
+		return prevCmd.transformedPoints[1];
+	case CUBIC_TO:
+		return prevCmd.transformedPoints[2];
+	}
+}
+
+vec2 ProjectPointOntoScreenBoundary(in vec2 point)
+{
+	if (IsPointInsideViewSpace(point))
+	{
+		return point;
+	}
+
+	if (point.y >= 0.0 && point.y < screenHeight - 1)
+	{
+		if (point.x < 0.0)
+		{
+			return vec2(-1.0, point.y);
+		}
+		if (point.x >= screenWidth)
+		{
+			return vec2(screenWidth, point.y);
+		}
+	}
+
+	const float distTop = abs(point.y);
+	const float distBottom = abs(point.y - screenHeight - 1);
+	float xCoord = clamp(point.x, -1.0, float(screenWidth));
+	if (distBottom < distTop)
+	{
+		return vec2(xCoord, screenHeight);
+	}
+
+	return vec2(xCoord, -1.0);
+}
+
+uint CalculateClosestDistanceScreenBoundary(in vec2 from, in vec2 to, inout vec2 path[3])
+{
+	path[0] = from;
+
+	// If they are on the same line on the boundary
+	if ((from.x == -1.0 && to.x == -1.0) ||
+		(from.x == screenWidth && to.x == screenWidth) ||
+		(from.y == -1.0 && to.y == -1.0) ||
+		(from.y == screenHeight && to.y == screenHeight))
+	{
+		path[1] = to;
+		return 2;
+	}
+
+	// If the point 'from' is on the top or bottom boundary
+	if (from.y == -1.0 || from.y == screenHeight)
+	{
+		if (to.x > from.x)
+		{
+			path[1] = vec2(screenWidth, from.y);
+		}
+		else
+		{
+			path[1] = vec2(-1.0, from.y);
+		}
+
+		path[2] = to;
+	}
+	else // Point 'from' is on the left or right boundary
+	{
+		if (to.y > from.y)
+		{
+			path[1] = vec2(from.x, float(screenHeight));
+		}
+		else
+		{
+			path[1] = vec2(from.x, -1.0);
+		}
+
+		path[2] = to;
+	}
+
+	return 3;
+}
+
+struct Segment
+{
+	vec2 p1;
+	vec2 p2;
+};
+
+const float epsilon = 0.001;
+
+bool LineLineIntersection(in Segment seg1, in Segment seg2, out vec2 intersection)
+{
+	const float x1 = seg1.p1.x;
+	const float y1 = seg1.p1.y;
+	const float x2 = seg1.p2.x;
+	const float y2 = seg1.p2.y;
+
+	const float x3 = seg2.p1.x;
+	const float y3 = seg2.p1.y;
+	const float x4 = seg2.p2.x;
+	const float y4 = seg2.p2.y;
+
+	const float d = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+	if (abs(d) < epsilon)
+	{
+		return false;
+	}
+
+	const float t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / d;
+	const float u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / d;
+
+	if (t >= 0.0 && t <= 1.0 && u >= 0.0 && u <= 1.0)
+	{
+		intersection = vec2(x1 + t * (x2 - x1), y1 + t * (y2 - y1));
+		return true;
+	}
+
+	return false;
+}
+
+uint FindIntersectionWithScreen(in Segment seg, out vec2 intersectionNear, out vec2 intersectionFar)
+{
+	Segment segLow = Segment(vec2(-1.0, -1.0), vec2(screenWidth, -1.0));
+	Segment segUp = Segment(vec2(-1.0, screenHeight), vec2(screenWidth, screenHeight));
+	Segment segLeft = Segment(vec2(-1.0, -1.0), vec2(-1.0, screenHeight));
+	Segment segRight = Segment(vec2(screenWidth, -1.0), vec2(screenWidth, screenHeight));
+
+	vec2 ints[4];
+
+	uint bits = 0;
+	bits |= uint(LineLineIntersection(segLow, seg, ints[0])) << 0;
+	bits |= uint(LineLineIntersection(segUp, seg, ints[1])) << 1;
+	bits |= uint(LineLineIntersection(segLeft, seg, ints[2])) << 2;
+	bits |= uint(LineLineIntersection(segRight, seg, ints[3])) << 3;
+
+	if (bits == 0)
+	{
+		return 0; // This should never happen
+	}
+
+	// There will be max 2 intersection with screen bbox and a line segment
+	vec2 result[2];
+
+	uint count = 0;
+	for (uint i = 0; i < 4; i++)
+	{
+		if (bool(bits & (1 << i)))
+		{
+			result[count++] = ints[i];
+		}
+	}
+
+	if (count == 1)
+	{
+		intersectionNear = result[0];
+	}
+	else
+	{
+		if (distance(seg.p1, result[0]) < distance(seg.p1, result[1]))
+		{
+			intersectionNear = result[0];
+			intersectionFar = result[1];
+		}
+		else
+		{
+			intersectionNear = result[1];
+			intersectionFar = result[0];
+		}
+	}
+
+	return count;
+}
+
+bool IsEqual(in vec2 v1, in vec2 v2)
+{
+	const float tolerance = 0.01;
+	float xd = abs(v1.x - v2.x);
+	float yd = abs(v1.y - v2.y);
+	//return (abs(v1.x - v2.x) <= tolerance) && (abs(v1.y - v2.y) <= tolerance);
+	return false;
+}
+
+uint HandleLine(uint cmdIndex, uint simpleCmdIndex, in vec2 last, in vec2 point, bool wasLastMove)
+{
+	if (wasLastMove)
+	{
+		if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point) && IsLineInsideViewSpace(last, point))
+		{
+			vec2 intersectionNear, intersectionFar;
+			uint count = FindIntersectionWithScreen(Segment(last, point), intersectionNear, intersectionFar);
+
+			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, intersectionNear);
+			simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, intersectionFar);
+			return 2;
+		}
+
+		if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+		{
+			vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+			vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+			if (IsEqual(lastProjected, pointProjected))
+			{
+				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, lastProjected);
+				return 1;
+			}
+
+			vec2 ps[3];
+			uint count = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected, ps);
+			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, lastProjected);
+			for (uint i = 1; i < count; i++)
+			{
+				simpleCommands[simpleCmdIndex + i] = SimpleCommand(LINE_TO, cmdIndex, ps[i]);
+			}
+
+			return count;
+		}
+		else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
+		{
+			vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+			vec2 intersection;
+			FindIntersectionWithScreen(Segment(last, point), intersection, intersection);
+			if (IsEqual(lastProjected, intersection))
+			{
+				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, lastProjected);
+				simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, intersection);
+				return 2;
+			}
+
+			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, lastProjected);
+			simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, intersection);
+			simpleCommands[simpleCmdIndex + 2] = SimpleCommand(LINE_TO, cmdIndex, point);
+			return 3;
+		}
+		else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+		{
+			vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+			vec2 intersection;
+			FindIntersectionWithScreen(Segment(last, point), intersection, intersection);
+			if (IsEqual(intersection, pointProjected))
+			{
+				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, last);
+				simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, intersection);
+				return 2;
+			}
+
+			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, last);
+			simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, intersection);
+			simpleCommands[simpleCmdIndex + 2] = SimpleCommand(LINE_TO, cmdIndex, pointProjected);
+			return 3;
+		}
+		else
+		{
+			if (IsEqual(last, point))
+			{
+				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, last);
+				return 1;
+			}
+
+			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, last);
+			simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, point);
+			return 2;
+		}
+	}
+	else
+	{
+		if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point) && IsLineInsideViewSpace(last, point))
+		{
+			vec2 intersectionNear, intersectionFar;
+			FindIntersectionWithScreen(Segment(last, point), intersectionNear, intersectionFar);
+
+			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, intersectionNear);
+			simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, intersectionFar);
+			return 2;
+		}
+
+		if (!IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+		{
+			vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
+			vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+
+			vec2 ps[3];
+			uint count = CalculateClosestDistanceScreenBoundary(lastProjected, pointProjected, ps);
+			for (uint i = 1; i < count; i++)
+			{
+				simpleCommands[simpleCmdIndex + i - 1] = SimpleCommand(LINE_TO, cmdIndex, ps[i]);
+			}
+
+			return count - 1;
+		}
+		else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
+		{
+			vec2 intersection;
+			FindIntersectionWithScreen(Segment(last, point), intersection, intersection);
+			if (IsEqual(intersection, point))
+			{
+				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, intersection);
+				return 1;
+			}
+
+			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, intersection);
+			simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, point);
+			return 2;
+		}
+		else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
+		{
+			vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
+			vec2 intersection;
+			FindIntersectionWithScreen(Segment(last, point), intersection, intersection);
+			if (IsEqual(intersection, pointProjected))
+			{
+				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, intersection);
+				return 1;
+			}
+
+			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, intersection);
+			simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, pointProjected);
+			return 2;
+		}
+		else
+		{
+			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, point);
+			return 1;
+		}
+	}
+}
+
+void Flatten(uint cmdIndex, in vec2 last, float tolerance)
+{
+	const Command cmd = commands[cmdIndex];
+	uint cmdType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+	if (cmdType == MOVE_TO)
+	{
+		return;
+	}
+
+	uint pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
+	const Path path = paths[pathIndex];
+	bool wasLastMove = false;
+	if (path.startCmdIndex == cmdIndex || GET_CMD_TYPE(commands[cmdIndex - 1].pathIndexCmdType) == MOVE_TO)
+	{
+		wasLastMove = true;
+	}
+
+	switch (cmdType)
+	{
+	case LINE_TO:
+	{
+		vec2 point = cmd.transformedPoints[0];
+		HandleLine(cmdIndex, cmd.startIndexSimpleCommands, last, point, wasLastMove);
+		break;
+	}
+	case QUAD_TO:
+	{
+		const vec2 p1 = cmd.transformedPoints[0];
+		const vec2 p2 = cmd.transformedPoints[1];
+
+		vec2 lastFlattened = last;
+		uint simpleCmdIndex = cmd.startIndexSimpleCommands;
+
+		const float dt = sqrt(((4.0 * tolerance) / length(last - 2.0 * p1 + p2)));
+		float t = 0.0;
+		while (t < 1.0)
+		{
+			t = min(t + dt, 1.0);
+			const vec2 p01 = lerp(last, p1, t);
+			const vec2 p12 = lerp(p1, p2, t);
+			const vec2 point = lerp(p01, p12, t);
+
+			simpleCmdIndex += HandleLine(cmdIndex, simpleCmdIndex, lastFlattened, point, wasLastMove);
+			lastFlattened = point;
+			wasLastMove = false;
+		}
+
+		break;
+	}
+	case CUBIC_TO:
+	{
+		const vec2 p1 = cmd.transformedPoints[0];
+		const vec2 p2 = cmd.transformedPoints[1];
+		const vec2 p3 = cmd.transformedPoints[2];
+
+		vec2 lastFlattened = last;
+		uint simpleCmdIndex = cmd.startIndexSimpleCommands;
+
+		const vec2 a = -1.0 * last + 3.0 * p1 - 3.0 * p2 + p3;
+		const vec2 b = 3.0 * (last - 2.0 * p1 + p2);
+		const float conc = max(length(b), length(a + b));
+		const float dt = sqrt((sqrt(8.0) * tolerance) / conc);
+		float t = 0.0;
+		while (t < 1.0)
+		{
+			t = min(t + dt, 1.0);
+			const vec2 p01 = lerp(last, p1, t);
+			const vec2 p12 = lerp(p1, p2, t);
+			const vec2 p23 = lerp(p2, p3, t);
+			const vec2 p012 = lerp(p01, p12, t);
+			const vec2 p123 = lerp(p12, p23, t);
+			const vec2 point = lerp(p012, p123, t);
+
+			simpleCmdIndex += HandleLine(cmdIndex, simpleCmdIndex, lastFlattened, point, wasLastMove);
+			lastFlattened = point;
+			wasLastMove = false;
+		}
+
+		break;
+	}
+	}
+}
+
+shared uint pathIndex;
+shared Path path;
+
+shared int bboxMinX;
+shared int bboxMinY;
+shared int bboxMaxX;
+shared int bboxMaxY;
+
+const int BBOX_MULT = 10;
+
+void BboxAddPoint(in vec2 point)
+{
+	atomicMin(bboxMinX, int(point.x * BBOX_MULT));
+	atomicMin(bboxMinY, int(point.y * BBOX_MULT));
+	atomicMax(bboxMaxX, int(point.x * BBOX_MULT));
+	atomicMax(bboxMaxY, int(point.y * BBOX_MULT));
+}
+
+void main()
+{
+	if (gl_LocalInvocationIndex == 0)
+	{
+		pathIndex = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+		if (pathIndex < paths.length())
+		{
+			path = paths[pathIndex];
+			bboxMinX = 2147483647;
+			bboxMinY = 2147483647;
+			bboxMaxX = -2147483648;
+			bboxMaxY = -2147483648;
+		}
+	}
+
+	barrier();
+
+	if (pathIndex < paths.length())
+	{
+		for (uint cmdIndex = path.startCmdIndex + gl_LocalInvocationIndex; cmdIndex <= path.endCmdIndex; cmdIndex += WG_SIZE)
+		{
+			if (cmdIndex < commands.length())
+			{
+				Command cmd = commands[cmdIndex];
+				for (uint simpleCmdIndex = cmd.startIndexSimpleCommands; simpleCmdIndex < cmd.endIndexSimpleCommands; simpleCmdIndex++)
+				{
+					BboxAddPoint(simpleCommands[simpleCmdIndex].point);
+				}
+			}
+		}
+	}
+
+	barrier();
+
+	if (gl_LocalInvocationIndex == 0 && pathIndex < paths.length())
+	{
+		const float mult = 1.0 / BBOX_MULT;
+		path.bbox.minmax = vec4(bboxMinX * mult, bboxMinY * mult, bboxMaxX * mult, bboxMaxY * mult);
+		path.bbox.minmax += vec4(-1, -1, 1, 1);
+		path.isBboxVisible = IsBboxInsideViewSpace(path.bbox);
+
+		paths[pathIndex].bbox = path.bbox;
+		paths[pathIndex].isBboxVisible = path.isBboxVisible;
+	}
+}
