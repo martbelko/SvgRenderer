@@ -120,7 +120,7 @@ layout(std430, binding = 6) buffer Atlas
 
 layout(std430, binding = 7) buffer Temp
 {
-	uint data;
+	uint atomicPreFlattenCounter;
 };
 
 vec2 lerp(in vec2 v0, in vec2 v1, float t)
@@ -407,8 +407,7 @@ bool IsEqual(in vec2 v1, in vec2 v2)
 	const float tolerance = 0.01;
 	float xd = abs(v1.x - v2.x);
 	float yd = abs(v1.y - v2.y);
-	//return (abs(v1.x - v2.x) <= tolerance) && (abs(v1.y - v2.y) <= tolerance);
-	return false;
+	return (abs(v1.x - v2.x) <= tolerance) && (abs(v1.y - v2.y) <= tolerance);
 }
 
 uint HandleLine(uint cmdIndex, uint simpleCmdIndex, in vec2 last, in vec2 point, bool wasLastMove)
@@ -448,8 +447,8 @@ uint HandleLine(uint cmdIndex, uint simpleCmdIndex, in vec2 last, in vec2 point,
 		else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
 		{
 			vec2 lastProjected = ProjectPointOntoScreenBoundary(last);
-			vec2 intersection;
-			FindIntersectionWithScreen(Segment(last, point), intersection, intersection);
+			vec2 intersection, temp;
+			FindIntersectionWithScreen(Segment(last, point), intersection, temp);
 			if (IsEqual(lastProjected, intersection))
 			{
 				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, lastProjected);
@@ -465,8 +464,8 @@ uint HandleLine(uint cmdIndex, uint simpleCmdIndex, in vec2 last, in vec2 point,
 		else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
 		{
 			vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
-			vec2 intersection;
-			FindIntersectionWithScreen(Segment(last, point), intersection, intersection);
+			vec2 intersection, temp;
+			FindIntersectionWithScreen(Segment(last, point), intersection, temp);
 			if (IsEqual(intersection, pointProjected))
 			{
 				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(MOVE_TO, cmdIndex, last);
@@ -520,8 +519,8 @@ uint HandleLine(uint cmdIndex, uint simpleCmdIndex, in vec2 last, in vec2 point,
 		}
 		else if (!IsPointInsideViewSpace(last) && IsPointInsideViewSpace(point))
 		{
-			vec2 intersection;
-			FindIntersectionWithScreen(Segment(last, point), intersection, intersection);
+			vec2 intersection, temp;
+			FindIntersectionWithScreen(Segment(last, point), intersection, temp);
 			if (IsEqual(intersection, point))
 			{
 				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, intersection);
@@ -530,13 +529,14 @@ uint HandleLine(uint cmdIndex, uint simpleCmdIndex, in vec2 last, in vec2 point,
 
 			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, intersection);
 			simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, point);
+
 			return 2;
 		}
 		else if (IsPointInsideViewSpace(last) && !IsPointInsideViewSpace(point))
 		{
 			vec2 pointProjected = ProjectPointOntoScreenBoundary(point);
-			vec2 intersection;
-			FindIntersectionWithScreen(Segment(last, point), intersection, intersection);
+			vec2 intersection, temp;
+			FindIntersectionWithScreen(Segment(last, point), intersection, temp);
 			if (IsEqual(intersection, pointProjected))
 			{
 				simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, intersection);
@@ -545,6 +545,7 @@ uint HandleLine(uint cmdIndex, uint simpleCmdIndex, in vec2 last, in vec2 point,
 
 			simpleCommands[simpleCmdIndex + 0] = SimpleCommand(LINE_TO, cmdIndex, intersection);
 			simpleCommands[simpleCmdIndex + 1] = SimpleCommand(LINE_TO, cmdIndex, pointProjected);
+
 			return 2;
 		}
 		else

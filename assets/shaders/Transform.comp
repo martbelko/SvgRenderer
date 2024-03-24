@@ -118,6 +118,11 @@ layout(std430, binding = 6) buffer Atlas
 	float atlas[];
 };
 
+layout(std430, binding = 7) buffer Temp
+{
+	uint atomicPreFlattenCounter;
+};
+
 void main()
 {
 	const uint cmdIndex = (gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x) * WG_SIZE + gl_LocalInvocationIndex;
