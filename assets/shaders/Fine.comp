@@ -125,7 +125,7 @@ layout(std430, binding = 7) buffer Helpers
 	uint renderIndicesCount;
 };
 
-//layout(binding = 0) uniform writeonly image2D outputTexture;
+layout(binding = 0) uniform writeonly image2D alphaTexture;
 
 uint pathIndex;
 int m_TileStartX;
@@ -206,8 +206,7 @@ void PerformTile(int x, int y, in const uint data[TILE_SIZE * TILE_SIZE], uint t
 
 			ivec2 texCoord = ivec2(uu1, vv1);
 			float v = data[y * TILE_SIZE + x] / 255.0;
-			atlas[index] = v;
-			//imageStore(outputTexture, texCoord, vec4(v, 0, 0, 0));
+			imageStore(alphaTexture, texCoord, vec4(v, 0, 0, 0));
 		}
 	}
 }
@@ -247,8 +246,8 @@ void Fine(in Path path)
 			{
 				const Increment increment = tile.increments[y * TILE_SIZE + x];
 				// Loop over each increment inside the tile
-				areas[y * TILE_SIZE + x] = increment.area / 1000.0f; // Just simple increment for area
-				heights[y * TILE_SIZE + x] = increment.height / 1000.0f; // Just simple increment for height
+				areas[y * TILE_SIZE + x] = increment.area / 1000.0; // Just simple increment for area
+				heights[y * TILE_SIZE + x] = increment.height / 1000.0; // Just simple increment for height
 			}
 		}
 

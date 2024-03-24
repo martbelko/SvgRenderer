@@ -125,10 +125,12 @@ layout(std430, binding = 7) buffer Helpers
 	uint renderIndicesCount;
 };
 
+shared Tile tile;
+
 void main()
 {
-	uint index = (gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x) * WG_SIZE + gl_LocalInvocationIndex;
-	if (index < paths.length())
+	const uint index = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
+	if (index < paths.length() && gl_LocalInvocationIndex == 0)
 	{
 		paths[index].bbox.minmax.xy = vec2(MAX_FLOAT);
 		paths[index].bbox.minmax.zw = vec2(-MAX_FLOAT);
@@ -137,31 +139,36 @@ void main()
 
 	if (index < tiles.length())
 	{
-		tiles[index].hasIncrements = false;
-		tiles[index].nextTileIndex = MAX_UINT;
-		tiles[index].winding = 0;
-		for (uint i = 0; i < TILE_SIZE * TILE_SIZE; i++)
+		if (gl_LocalInvocationIndex == 0)
 		{
-			tiles[index].increments[i].area = 0;
-			tiles[index].increments[i].height = 0;
+			tile = tiles[index];
+			tile.hasIncrements = false;
+			tile.nextTileIndex = MAX_UINT;
+			tile.winding = 0;
 		}
 	}
 
-	if (index < vertices.length())
+	barrier();
+
+	if (index < tiles.length())
 	{
-		vertices[index] = Vertex(int[2](-1, -1), uint[2](0, 0), 0);
+		tile.increments[gl_LocalInvocationIndex].area = 0;
+		tile.increments[gl_LocalInvocationIndex].height = 0;
 	}
 
-	if (index == 0)
+	barrier();
+
+	if (index < tiles.length() && gl_LocalInvocationIndex == 0)
 	{
-		atlas[0] = 1.0;
+		tiles[index] = tile;
 	}
-	else if (index < atlas.length())
-	{
-		atlas[index] = 0.0;
-	}
+
+	//if (index < vertices.length() && gl_LocalInvocationIndex == 0)
+	//{
+	//	vertices[index] = Vertex(int[2](-1, -1), uint[2](0, 0), 0);
+	//}
 
 	atomicPreFlattenCounter = 0;
 	atomicPreFillCounter = 0;
-	renderIndicesCount = 0;
+	//renderIndicesCount = 0;
 }
