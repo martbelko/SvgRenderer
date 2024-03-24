@@ -98,6 +98,11 @@ namespace SvgRenderer::Flattening {
 
 	bool IsBboxInsideViewSpace(const BoundingBox& bbox)
 	{
+		if (bbox.max.x < bbox.min.x)
+		{
+			return false;
+		}
+
 		glm::vec2 p1 = glm::vec2(bbox.min.x, bbox.max.y);
 		glm::vec2 p2 = glm::vec2(bbox.max.x, bbox.min.y);
 		return IsLineInsideViewSpace(bbox.min, bbox.max) || IsLineInsideViewSpace(p1, p2);

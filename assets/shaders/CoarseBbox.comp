@@ -220,6 +220,11 @@ bool IsLineInsideViewSpace(in vec2 p0, in vec2 p1)
 
 bool IsBboxInsideViewSpace(in BoundingBox bbox)
 {
+	if (bbox.minmax.z < bbox.minmax.x)
+	{
+		return false;
+	}
+
 	vec2 p1 = vec2(bbox.minmax.x, bbox.minmax.w);
 	vec2 p2 = vec2(bbox.minmax.z, bbox.minmax.y);
 	return IsLineInsideViewSpace(bbox.minmax.xy, bbox.minmax.zw) || IsLineInsideViewSpace(p1, p2);
