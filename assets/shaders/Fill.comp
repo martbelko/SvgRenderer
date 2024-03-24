@@ -1,7 +1,6 @@
 #version 460 core
 
 #define WG_SIZE 1024
-
 layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 #define MOVE_TO 0
@@ -9,10 +8,17 @@ layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
 #define QUAD_TO 2
 #define CUBIC_TO 3
 
-#define GET_CMD_PATH_INDEX(value) (value >> 16)
-#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
+#define GET_CMD_PATH_INDEX(value) (value >> 8)
+#define GET_CMD_TYPE(value) (value & 0x000000FF)
+#define MAKE_CMD_PATH_INDEX(value, index) ((index << 8) | (value & 0x000000FF))
+#define MAKE_CMD_TYPE(value, type) (type | (value & 0xFFFFFF00))
 
-#define TILE_SIZE 16
+const float TOLERANCE = 0.05f; // Quality of flattening
+const uint TILE_SIZE = 16;
+const uint ATLAS_SIZE = 4096 * 2;
+
+const uint MAX_UINT = 4294967295;
+const float MAX_FLOAT = 3.40282347e+38F;
 
 struct BoundingBox
 {
@@ -50,6 +56,7 @@ struct Command
 struct SimpleCommand // Lines or moves only
 {
 	uint type;
+	uint cmdIndex;
 	vec2 point;
 };
 
@@ -59,9 +66,6 @@ struct Increment
 	int height;
 };
 
-const uint MAX_UINT = 4294967295;
-const float MAX_FLOAT = 3.40282347e+38F;
-
 struct Tile
 {
 	int winding;
@@ -70,24 +74,33 @@ struct Tile
 	Increment[TILE_SIZE * TILE_SIZE] increments;
 };
 
-layout(std430, binding = 0) buffer Paths
+struct Vertex
+{
+	int pos[2];
+	uint uv[2];
+	uint color;
+};
+
+layout(std140, binding = 0) uniform Params
+{
+	mat4 globalTransform;
+	uint screenWidth;
+	uint screenHeight;
+};
+
+layout(std430, binding = 1) buffer Paths
 {
 	Path paths[];
 };
 
-layout(std430, binding = 1) buffer Commands
+layout(std430, binding = 2) buffer Commands
 {
 	Command commands[];
 };
 
-layout(std430, binding = 2) buffer SimpleCommands
+layout(std430, binding = 3) buffer SimpleCommands
 {
 	SimpleCommand simpleCommands[];
-};
-
-layout(std430, binding = 3) buffer Atomics
-{
-	uint atomic;
 };
 
 layout(std430, binding = 4) buffer Tiles
@@ -95,122 +108,46 @@ layout(std430, binding = 4) buffer Tiles
 	Tile tiles[];
 };
 
-vec2 GetPreviousPoint(uint pathIndex, uint cmdIndex)
+layout(std430, binding = 5) buffer Vertices
 {
-	Path path = paths[pathIndex];
+	Vertex vertices[];
+};
+
+layout(std430, binding = 6) buffer Atlas
+{
+	float atlas[];
+};
+
+layout(std430, binding = 7) buffer Atomics
+{
+	uint atomicPreFlattenCounter;
+	uint atomicPreFillCounter;
+};
+
+vec2 GetPreviousFlattenedPoint(uint pathIndex, uint cmdIndex)
+{
+	const Path path = paths[pathIndex];
 	if (cmdIndex == path.startCmdIndex)
 	{
 		return vec2(0, 0);
 	}
 
-	Command cmd = commands[cmdIndex - 1];
-	uint pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
+	const Command prevCmd = commands[cmdIndex - 1];
+	if (prevCmd.startIndexSimpleCommands != prevCmd.endIndexSimpleCommands)
+	{
+		return simpleCommands[prevCmd.endIndexSimpleCommands - 1].point;
+	}
+
+	uint pathType = GET_CMD_TYPE(prevCmd.pathIndexCmdType);
 	switch (pathType)
 	{
 	case MOVE_TO:
-	case LINE_TO:
-		return cmd.transformedPoints[0];
-	case QUAD_TO:
-		return cmd.transformedPoints[1];
-	case CUBIC_TO:
-		return cmd.transformedPoints[2];
-	}
-}
-
-bool IsPointInsideViewSpace(in vec2 v)
-{
-	// TODO: Set for width and height of the window
-	const float padding = 1.0;
-	return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
-}
-
-const int INSIDE = 0; // 0000
-const int LEFT = 1;   // 0001
-const int RIGHT = 2;  // 0010
-const int BOTTOM = 4; // 0100
-const int TOP = 8;    // 1000
-
-int ComputeOutCode(in vec2 p)
-{
-	int code = INSIDE;
-
-	if (p.x < 0.0f)
-		code |= LEFT;
-	else if (p.x > 1900.0)
-		code |= RIGHT;
-	if (p.y < 0.0f)
-		code |= BOTTOM;
-	else if (p.y > 1000.0)
-		code |= TOP;
-
-	return code;
-}
-
-bool IsLineInsideViewSpace(vec2 p0, vec2 p1)
-{
-	int outcode0 = ComputeOutCode(p0);
-	int outcode1 = ComputeOutCode(p1);
-	bool accept = false;
-
-	while (true)
 	{
-		if (!bool(outcode0 | outcode1))
-		{
-			accept = true;
-			break;
-		}
-		else if (bool(outcode0 & outcode1))
-		{
-			break;
-		}
-		else
-		{
-			float x, y;
-			int outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
-			if (bool(outcodeOut & TOP))
-			{
-				x = p0.x + (p1.x - p0.x) * (1000 - p0.y) / (p1.y - p0.y);
-				y = 1000;
-			}
-			else if (bool(outcodeOut & BOTTOM))
-			{
-				x = p0.x + (p1.x - p0.x) * (-p0.y) / (p1.y - p0.y);
-				y = 0;
-			}
-			else if (bool(outcodeOut & RIGHT))
-			{
-				y = p0.y + (p1.y - p0.y) * (1900 - p0.x) / (p1.x - p0.x);
-				x = 1900;
-			}
-			else if (bool(outcodeOut & LEFT))
-			{
-				y = p0.y + (p1.y - p0.y) * (-p0.x) / (p1.x - p0.x);
-				x = 0;
-			}
-
-			if (outcodeOut == outcode0)
-			{
-				p0.x = x;
-				p0.y = y;
-				outcode0 = ComputeOutCode(p0);
-			}
-			else
-			{
-				p1.x = x;
-				p1.y = y;
-				outcode1 = ComputeOutCode(p1);
-			}
-		}
+		return prevCmd.transformedPoints[0];
+	}
 	}
 
-	return accept;
-}
-
-bool IsBboxInsideViewSpace(in BoundingBox bbox)
-{
-	vec2 p1 = vec2(bbox.minmax.x, bbox.minmax.w);
-	vec2 p2 = vec2(bbox.minmax.z, bbox.minmax.y);
-	return IsLineInsideViewSpace(bbox.minmax.xy, bbox.minmax.zw) || IsLineInsideViewSpace(p1, p2);
+	return vec2(0, 0);
 }
 
 vec2 GetSimpleCmdPrevPoint(uint simpleCmdIndex, in vec2 lastPoint, in Command cmd)
@@ -316,19 +253,19 @@ void LineToSimpleCmd(vec2 last, vec2 point, uint pathIndex)
 			float right = x + 1;
 			float area = 0.5f * height * ((right - p0.x) + (right - p1.x));
 
-			int relativeX = abs(x % TILE_SIZE);
-			int relativeY = abs(y % TILE_SIZE);
+			int relativeX = abs(x % int(TILE_SIZE));
+			int relativeY = abs(y % int(TILE_SIZE));
 			if (x < 0)
 			{
-				relativeX = TILE_SIZE - relativeX - 1;
+				relativeX = int(TILE_SIZE) - relativeX - 1;
 			}
 			if (y < 0)
 			{
-				relativeY = TILE_SIZE - relativeY - 1;
+				relativeY = int(TILE_SIZE) - relativeY - 1;
 			}
 
 			atomicAdd(tiles[paths[pathIndex].startTileIndex + GetTileIndexFromWindowPos(x, y)].increments[relativeY * TILE_SIZE + relativeX].area, int(area * 1000.0));
-			atomicAdd(tiles[paths[pathIndex].startTileIndex + GetTileIndexFromWindowPos(x, y)].increments[relativeY * TILE_SIZE + relativeX].height, int(height * 1000.0f));
+			atomicAdd(tiles[paths[pathIndex].startTileIndex + GetTileIndexFromWindowPos(x, y)].increments[relativeY * TILE_SIZE + relativeX].height, int(height * 1000.0));
 			tiles[paths[pathIndex].startTileIndex + GetTileIndexFromWindowPos(x, y)].hasIncrements = true;
 
 			// Advance to the next scanline
@@ -364,18 +301,16 @@ void LineToSimpleCmd(vec2 last, vec2 point, uint pathIndex)
 				uint tileCount = path.endTileIndex - path.startTileIndex + 1;
 				uint currentIndex = max(min(GetTileIndexFromRelativePos(int(v1), int(currentTileY)), uint(tileCount - 1)), 0);
 
+				for (uint i = 0; i < currentIndex; i++)
 				{
-					for (uint i = 0; i < currentIndex; i++)
-					{
-						atomicAdd(tiles[i + path.startTileIndex].winding, v2);
-					}
+					atomicAdd(tiles[i + path.startTileIndex].winding, v2);
 				}
 
 				prevTileY = tileY;
 			}
 
 			// Break the loop if we are on the end
-			if (rowt0 == 1.0f || colt0 == 1.0f)
+			if (rowt0 == 1.0 || colt0 == 1.0)
 			{
 				break;
 			}
@@ -408,7 +343,7 @@ void main()
 		uint pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
 		Path path = paths[pathIndex];
 
-		if (IsBboxInsideViewSpace(path.bbox))
+		if (path.isBboxVisible)
 		{
 			if (gl_LocalInvocationIndex == 0)
 			{
@@ -417,7 +352,7 @@ void main()
 		}
 	}
 
-	barrier(); // TODO: Only for single workgroup
+	barrier();
 
 	if (cmdIndex < commands.length())
 	{
@@ -425,9 +360,8 @@ void main()
 		uint pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
 		Path path = paths[pathIndex];
 
-		if (IsBboxInsideViewSpace(path.bbox))
+		if (path.isBboxVisible)
 		{
-			// TODO: We are not interested in tiles, where x-coord of the tile is above SCREEN_WIDTH, or y-coord is above SCREEN_HEIGHT
 			const int minBboxCoordX = int(floor(path.bbox.minmax.x));
 			const int minBboxCoordY = int(floor(path.bbox.minmax.y));
 			const int maxBboxCoordX = int(ceil(path.bbox.minmax.z));
@@ -443,12 +377,12 @@ void main()
 			m_TileCountX = maxTileCoordX - minTileCoordX + 1;
 			m_TileCountY = maxTileCoordY - minTileCoordY + 1;
 
-			vec2 last = GetPreviousPoint(pathIndex, cmdIndex);
+			vec2 last = GetPreviousFlattenedPoint(pathIndex, cmdIndex);
 
 			for (uint i = 0; i < numIter; i++)
 			{
 				uint simpleCmdIndex = cmd.startIndexSimpleCommands + (i * WG_SIZE) + gl_LocalInvocationIndex;
-				if (simpleCmdIndex <= cmd.endIndexSimpleCommands)
+				if (simpleCmdIndex < cmd.endIndexSimpleCommands)
 				{
 					CommandFromArray(simpleCmdIndex, last, cmd);
 				}

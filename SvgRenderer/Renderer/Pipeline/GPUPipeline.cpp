@@ -167,6 +167,7 @@ namespace SvgRenderer {
 		m_FlattenShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Flatten.comp");
 		m_CalcBboxShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CalcBbox.comp");
 		m_PreFillShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFill.comp");
+		m_FillShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Fill.comp");
 	}
 
 	void GPUPipeline::Shutdown()
@@ -320,58 +321,22 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Pre-Fill: {0} ms", timer.ElapsedMillis());
-
-			readData();
 		}
 
-		// 4.2: Filling
+		// 7.step: Filling
 		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.paths.size());
-			std::iota(indices.begin(), indices.end(), 0);
+			Timer timer;
 
-			Timer timer43;
-			ForEach(indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
-				{
-					const PathRender& path = Globals::AllPaths.paths[pathIndex];
-					if (!path.isBboxVisible)
-					{
-						return;
-					}
+			uint32_t ySize = glm::ceil(Globals::CommandsCount / static_cast<float>(maxWgCountX));
+			uint32_t xSize = ySize == 1 ? Globals::CommandsCount : maxWgCountX;
 
-					std::vector<uint32_t> indices;
-					indices.resize(path.endCmdIndex - path.startCmdIndex + 1);
-					std::iota(indices.begin(), indices.end(), 0);
+			m_FillShader->Bind();
+			m_FillShader->Dispatch(xSize, ySize, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-					Rasterizer rast(pathIndex);
-					ForEach(indices.cbegin(), indices.cend(), [this, pathIndex, &path, &rast](uint32_t cmdIndex)
-						{
-							const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex + path.startCmdIndex];
-							glm::vec2 last = GetPreviousFlattenedPoint(pathIndex, cmdIndex + path.startCmdIndex);
-							std::vector<uint32_t> indices;
-							indices.resize(cmd.endIndexSimpleCommands - cmd.startIndexSimpleCommands);
-							std::iota(indices.begin(), indices.end(), cmd.startIndexSimpleCommands);
+			SR_TRACE("Fill: {0} ms", timer.ElapsedMillis());
 
-							auto GetSimpleCmdPrevPoint = [last, &cmd](uint32_t simpleCmdIndex) -> glm::vec2
-								{
-									return simpleCmdIndex == cmd.startIndexSimpleCommands ? last : Globals::AllPaths.simpleCommands[simpleCmdIndex - 1].point;
-								};
-
-							ForEach(indices.cbegin(), indices.cend(), [this, GetSimpleCmdPrevPoint, &rast](uint32_t i)
-								{
-									const SimpleCommand& simpleCmd = Globals::AllPaths.simpleCommands[i];
-									glm::vec2 last = GetSimpleCmdPrevPoint(i);
-
-									switch (simpleCmd.type)
-									{
-									case LINE_TO:
-										rast.LineTo(last, simpleCmd.point);
-										break;
-									}
-								});
-						});
-				});
-			SR_TRACE("Filling: {0}", timer43.ElapsedMillis());
+			readData();
 		}
 
 		// 4.3: Calculate correct count and indices for vertices of each path

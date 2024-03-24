@@ -39,6 +39,7 @@ namespace SvgRenderer {
 		Ref<Shader> m_FlattenShader;
 		Ref<Shader> m_CalcBboxShader;
 		Ref<Shader> m_PreFillShader;
+		Ref<Shader> m_FillShader;
 
 		uint32_t m_ParamsBuf, m_PathsBuf, m_CmdsBuf, m_SimpleCmdsBuf, m_TilesBuf, m_VerticesBuf, m_AtlasBuf, m_AtomicsBuf;
 
