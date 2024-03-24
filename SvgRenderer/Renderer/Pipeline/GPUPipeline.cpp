@@ -138,7 +138,7 @@ namespace SvgRenderer {
 		glCreateBuffers(1, &m_TilesBuf);
 		glCreateBuffers(1, &m_VerticesBuf);
 		glCreateBuffers(1, &m_AtlasBuf);
-		glCreateBuffers(1, &m_TempBuf);
+		glCreateBuffers(1, &m_AtomicsBuf);
 
 		constexpr GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT | GL_DYNAMIC_STORAGE_BIT;
 		glNamedBufferStorage(m_ParamsBuf, sizeof(ParamsBuf), nullptr, GL_DYNAMIC_STORAGE_BIT);
@@ -148,7 +148,7 @@ namespace SvgRenderer {
 		glNamedBufferStorage(m_TilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
 		glNamedBufferStorage(m_VerticesBuf, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
 		glNamedBufferStorage(m_AtlasBuf, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
-		glNamedBufferStorage(m_TempBuf, sizeof(uint32_t), nullptr, bufferFlags);
+		glNamedBufferStorage(m_AtomicsBuf, 2 * sizeof(uint32_t), nullptr, bufferFlags);
 
 		glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_ParamsBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_PathsBuf);
@@ -157,7 +157,7 @@ namespace SvgRenderer {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_TilesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_VerticesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, m_AtlasBuf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, m_TempBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, m_AtomicsBuf);
 
 		m_FinalShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
 		m_ResetShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Reset.comp");
@@ -166,6 +166,7 @@ namespace SvgRenderer {
 		m_PreFlattenShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFlatten.comp");
 		m_FlattenShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Flatten.comp");
 		m_CalcBboxShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CalcBbox.comp");
+		m_PreFillShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFill.comp");
 	}
 
 	void GPUPipeline::Shutdown()
@@ -182,7 +183,7 @@ namespace SvgRenderer {
 		glDeleteBuffers(1, &m_TilesBuf);
 		glDeleteBuffers(1, &m_VerticesBuf);
 		glDeleteBuffers(1, &m_AtlasBuf);
-		glDeleteBuffers(1, &m_TempBuf);
+		glDeleteBuffers(1, &m_AtomicsBuf);
 	}
 
 	void GPUPipeline::Render()
@@ -291,8 +292,6 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Flattening: {0} ms", timer.ElapsedMillis());
-
-			readData();
 		}
 
 		// 6.step: Calculating BBOX
@@ -307,46 +306,22 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Calculating BBOX: {0} ms", timer.ElapsedMillis());
-
-			readData();
 		}
 
-		// 4.1: Calculate correct tile indices for each path according to its bounding box
+		// 7.step: Calculate correct tile indices for each path according to its bounding box
 		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.paths.size());
-			std::iota(indices.begin(), indices.end(), 0);
+			Timer timer;
 
-			Timer timer41;
-			std::atomic_uint32_t tileCount = 0;
-			ForEach(indices.cbegin(), indices.cend(), [&tileCount](uint32_t pathIndex)
-				{
-					PathRender& path = Globals::AllPaths.paths[pathIndex];
-					if (!path.isBboxVisible)
-					{
-						return;
-					}
+			uint32_t ySize = glm::ceil(Globals::PathsCount / static_cast<float>(maxWgCountX));
+			uint32_t xSize = ySize == 1 ? Globals::PathsCount : maxWgCountX;
 
-					const int32_t minBboxCoordX = glm::floor(path.bbox.min.x);
-					const int32_t minBboxCoordY = glm::floor(path.bbox.min.y);
-					const int32_t maxBboxCoordX = glm::ceil(path.bbox.max.x);
-					const int32_t maxBboxCoordY = glm::ceil(path.bbox.max.y);
+			m_PreFillShader->Bind();
+			m_PreFillShader->Dispatch(xSize, ySize, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-					const int32_t minTileCoordX = glm::floor(static_cast<float>(minBboxCoordX) / TILE_SIZE);
-					const int32_t minTileCoordY = glm::floor(static_cast<float>(minBboxCoordY) / TILE_SIZE);
-					const int32_t maxTileCoordX = glm::ceil(static_cast<float>(maxBboxCoordX) / TILE_SIZE);
-					const int32_t maxTileCoordY = glm::ceil(static_cast<float>(maxBboxCoordY) / TILE_SIZE);
+			SR_TRACE("Pre-Fill: {0} ms", timer.ElapsedMillis());
 
-					uint32_t tileCountX = maxTileCoordX - minTileCoordX + 1;
-					uint32_t tileCountY = maxTileCoordY - minTileCoordY + 1;
-
-					const uint32_t count = tileCountX * tileCountY;
-
-					uint32_t oldCount = tileCount.fetch_add(count);
-					path.startTileIndex = oldCount;
-					path.endTileIndex = oldCount + count - 1;
-				});
-			SR_TRACE("Step 4.1: {0} ms", timer41.ElapsedMillis());
+			readData();
 		}
 
 		// 4.2: Filling

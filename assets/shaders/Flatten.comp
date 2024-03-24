@@ -118,9 +118,10 @@ layout(std430, binding = 6) buffer Atlas
 	float atlas[];
 };
 
-layout(std430, binding = 7) buffer Temp
+layout(std430, binding = 7) buffer Atomics
 {
 	uint atomicPreFlattenCounter;
+	uint atomicPreFillCounter;
 };
 
 vec2 lerp(in vec2 v0, in vec2 v1, float t)
