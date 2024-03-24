@@ -148,7 +148,7 @@ namespace SvgRenderer {
 		glNamedBufferStorage(m_TilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
 		glNamedBufferStorage(m_VerticesBuf, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
 		glNamedBufferStorage(m_AtlasBuf, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
-		glNamedBufferStorage(m_AtomicsBuf, 2 * sizeof(uint32_t), nullptr, bufferFlags);
+		glNamedBufferStorage(m_AtomicsBuf, 3 * sizeof(uint32_t), nullptr, bufferFlags);
 
 		glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_ParamsBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_PathsBuf);
@@ -169,6 +169,7 @@ namespace SvgRenderer {
 		m_PreFillShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFill.comp");
 		m_FillShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Fill.comp");
 		m_CalcQuadsShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CalcQuads.comp");
+		m_PrefixSumShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PrefixSum.comp");
 	}
 
 	void GPUPipeline::Shutdown()
@@ -324,7 +325,7 @@ namespace SvgRenderer {
 			SR_TRACE("Pre-Fill: {0} ms", timer.ElapsedMillis());
 		}
 
-		// 7.step: Filling
+		// 8.step: Filling
 		{
 			Timer timer;
 
@@ -338,7 +339,7 @@ namespace SvgRenderer {
 			SR_TRACE("Fill: {0} ms", timer.ElapsedMillis());
 		}
 
-		// 8.step: Calculate correct count and indices for vertices of each path
+		// 9.step: Calculate correct count and indices for vertices of each path
 		{
 			Timer timer;
 
@@ -350,37 +351,22 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Calculating quads: {0} ms", timer.ElapsedMillis());
-
-			readData();
 		}
 
-		// 4.4: Calculate correct tile indices for each path
+		// 10.step: Prefix sum
 		{
-			Timer timerPrefixSum;
-			uint32_t accumCount = 0;
-			uint32_t accumTileCount = 0;
-			for (uint32_t pathIndex = 0; pathIndex < Globals::AllPaths.paths.size(); pathIndex++)
-			{
-				PathRender& path = Globals::AllPaths.paths[pathIndex];
-				if (!path.isBboxVisible)
-				{
-					continue;
-				}
+			Timer timer;
 
-				Rasterizer rast(pathIndex);
+			uint32_t ySize = glm::ceil(Globals::PathsCount / static_cast<float>(maxWgCountX));
+			uint32_t xSize = ySize == 1 ? Globals::PathsCount : maxWgCountX;
 
-				uint32_t coarseQuadCount = path.startSpanQuadIndex;
-				uint32_t fineQuadCount = path.startTileQuadIndex;
-				path.startSpanQuadIndex = accumCount;
-				path.startTileQuadIndex = accumCount + coarseQuadCount;
-				accumCount += coarseQuadCount + fineQuadCount;
+			m_PrefixSumShader->Bind();
+			m_PrefixSumShader->Dispatch(1, 1, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-				path.startVisibleTileIndex = accumTileCount;
-				accumTileCount += fineQuadCount;
-			}
+			SR_TRACE("Prefix sum: {0} ms", timer.ElapsedMillis());
 
-			m_RenderIndicesCount = accumCount * 6;
-			SR_TRACE("Prefix sum: {0}", timerPrefixSum.ElapsedMillis());
+			readData();
 		}
 
 		// 4.5: Coarse
@@ -447,7 +433,7 @@ namespace SvgRenderer {
 
 		glClearColor(1.0, 1.0, 1.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
-		glDrawElements(GL_TRIANGLES, m_RenderIndicesCount, GL_UNSIGNED_INT, nullptr);
+		glDrawElements(GL_TRIANGLES, m_TileBuilder.indices.size(), GL_UNSIGNED_INT, nullptr);
 	}
 
 }

@@ -118,12 +118,12 @@ layout(std430, binding = 6) buffer Atlas
 	float atlas[];
 };
 
-layout(std430, binding = 7) buffer Atomics
+layout(std430, binding = 7) buffer Helpers
 {
 	uint atomicPreFlattenCounter;
 	uint atomicPreFillCounter;
+	uint renderIndicesCount;
 };
-
 
 shared uint pathIndex;
 shared Path path;
