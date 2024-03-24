@@ -270,7 +270,7 @@ void Fine(in Path path)
 
 		int tileX = GetTileXFromAbsoluteIndex(i);
 		int tileY = GetTileYFromAbsoluteIndex(i);
-		if (tileX >= 0 && tileY >= 0 && tileX <= ceil(float(1900.0) / TILE_SIZE) && tileY <= ceil(float(1000.0) / TILE_SIZE))
+		if (tileX >= 0 && tileY >= 0 && tileX <= ceil(float(screenWidth) / TILE_SIZE) && tileY <= ceil(float(screenHeight) / TILE_SIZE))
 		{
 			PerformTile(tileX * int(TILE_SIZE), tileY * int(TILE_SIZE), tileData, tileIndex++, quadIndex++, paths[pathIndex].color);
 		}

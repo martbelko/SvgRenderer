@@ -239,7 +239,7 @@ namespace SvgRenderer {
 			m_ResetShader->Bind();
 			m_ResetShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Reseting: {0} ms", timer.ElapsedMillis());
 		}
@@ -255,7 +255,7 @@ namespace SvgRenderer {
 			m_TransformShader->Bind();
 			m_TransformShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Transforming: {0} ms", timer.ElapsedMillis());
 		}
@@ -271,7 +271,7 @@ namespace SvgRenderer {
 			m_CoarseBboxShader->Bind();
 			m_CoarseBboxShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Calculating Coarse BBOX: {0} ms", timer.ElapsedMillis());
 		}
@@ -288,7 +288,7 @@ namespace SvgRenderer {
 			m_PreFlattenShader->Bind();
 			m_PreFlattenShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Pre-flatten: {0} ms", timer.ElapsedMillis());
 		}
@@ -305,7 +305,7 @@ namespace SvgRenderer {
 			m_FlattenShader->Bind();
 			m_FlattenShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Flattening: {0} ms", timer.ElapsedMillis());
 		}
@@ -320,7 +320,7 @@ namespace SvgRenderer {
 			m_CalcBboxShader->Bind();
 			m_CalcBboxShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Calculating BBOX: {0} ms", timer.ElapsedMillis());
 		}
@@ -335,7 +335,7 @@ namespace SvgRenderer {
 			m_PreFillShader->Bind();
 			m_PreFillShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Pre-Fill: {0} ms", timer.ElapsedMillis());
 		}
@@ -350,7 +350,7 @@ namespace SvgRenderer {
 			m_FillShader->Bind();
 			m_FillShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Fill: {0} ms", timer.ElapsedMillis());
 		}
@@ -365,7 +365,7 @@ namespace SvgRenderer {
 			m_CalcQuadsShader->Bind();
 			m_CalcQuadsShader->Dispatch(xSize, ySize, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Calculating quads: {0} ms", timer.ElapsedMillis());
 		}
@@ -380,7 +380,7 @@ namespace SvgRenderer {
 			m_PrefixSumShader->Bind();
 			m_PrefixSumShader->Dispatch(1, 1, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-			//glFinish();
+			glFinish();
 
 			SR_TRACE("Prefix sum: {0} ms", timer.ElapsedMillis());
 		}
