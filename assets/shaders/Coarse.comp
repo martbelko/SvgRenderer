@@ -1,18 +1,24 @@
 #version 460 core
 
 #define WG_SIZE 1
-
 layout(local_size_x = WG_SIZE, local_size_y = 1, local_size_z = 1) in;
-
-#define TILE_SIZE 16
 
 #define MOVE_TO 0
 #define LINE_TO 1
 #define QUAD_TO 2
 #define CUBIC_TO 3
 
-#define GET_CMD_PATH_INDEX(value) (value >> 16)
-#define GET_CMD_TYPE(value) ((value & 0x0000FF00) >> 8)
+#define GET_CMD_PATH_INDEX(value) (value >> 8)
+#define GET_CMD_TYPE(value) (value & 0x000000FF)
+#define MAKE_CMD_PATH_INDEX(value, index) ((index << 8) | (value & 0x000000FF))
+#define MAKE_CMD_TYPE(value, type) (type | (value & 0xFFFFFF00))
+
+const float TOLERANCE = 0.05f; // Quality of flattening
+const uint TILE_SIZE = 16;
+const uint ATLAS_SIZE = 4096 * 2;
+
+const uint MAX_UINT = 4294967295;
+const float MAX_FLOAT = 3.40282347e+38F;
 
 struct BoundingBox
 {
@@ -50,6 +56,7 @@ struct Command
 struct SimpleCommand // Lines or moves only
 {
 	uint type;
+	uint cmdIndex;
 	vec2 point;
 };
 
@@ -74,24 +81,26 @@ struct Vertex
 	uint color;
 };
 
-layout(std430, binding = 0) buffer Paths
+layout(std140, binding = 0) uniform Params
+{
+	mat4 globalTransform;
+	uint screenWidth;
+	uint screenHeight;
+};
+
+layout(std430, binding = 1) buffer Paths
 {
 	Path paths[];
 };
 
-layout(std430, binding = 1) buffer Commands
+layout(std430, binding = 2) buffer Commands
 {
 	Command commands[];
 };
 
-layout(std430, binding = 2) buffer SimpleCommands
+layout(std430, binding = 3) buffer SimpleCommands
 {
 	SimpleCommand simpleCommands[];
-};
-
-layout(std430, binding = 3) buffer Atomics
-{
-	uint atomic;
 };
 
 layout(std430, binding = 4) buffer Tiles
@@ -102,6 +111,18 @@ layout(std430, binding = 4) buffer Tiles
 layout(std430, binding = 5) buffer Vertices
 {
 	Vertex vertices[];
+};
+
+layout(std430, binding = 6) buffer Atlas
+{
+	float atlas[];
+};
+
+layout(std430, binding = 7) buffer Helpers
+{
+	uint atomicPreFlattenCounter;
+	uint atomicPreFillCounter;
+	uint renderIndicesCount;
 };
 
 vec2 GetPreviousPoint(uint pathIndex, uint cmdIndex)
@@ -124,102 +145,6 @@ vec2 GetPreviousPoint(uint pathIndex, uint cmdIndex)
 	case CUBIC_TO:
 		return cmd.transformedPoints[2];
 	}
-}
-
-bool IsPointInsideViewSpace(in vec2 v)
-{
-	// TODO: Set for width and height of the window
-	const float padding = 1.0;
-	return !(v.x > 1900 + padding || v.x < 0 - padding || v.y > 1000 + padding || v.y < 0 - padding);
-}
-
-const int INSIDE = 0;
-const int LEFT = 1;
-const int RIGHT = 2;
-const int BOTTOM = 4;
-const int TOP = 8;
-
-int ComputeOutCode(in vec2 p)
-{
-	int code = INSIDE;
-
-	if (p.x < 0.0f)
-		code |= LEFT;
-	else if (p.x > 1900.0)
-		code |= RIGHT;
-	if (p.y < 0.0f)
-		code |= BOTTOM;
-	else if (p.y > 1000.0)
-		code |= TOP;
-
-	return code;
-}
-
-bool IsLineInsideViewSpace(vec2 p0, vec2 p1)
-{
-	int outcode0 = ComputeOutCode(p0);
-	int outcode1 = ComputeOutCode(p1);
-	bool accept = false;
-
-	while (true)
-	{
-		if (!bool(outcode0 | outcode1))
-		{
-			accept = true;
-			break;
-		}
-		else if (bool(outcode0 & outcode1))
-		{
-			break;
-		}
-		else
-		{
-			float x, y;
-			int outcodeOut = outcode1 > outcode0 ? outcode1 : outcode0;
-			if (bool(outcodeOut & TOP))
-			{
-				x = p0.x + (p1.x - p0.x) * (1000 - p0.y) / (p1.y - p0.y);
-				y = 1000;
-			}
-			else if (bool(outcodeOut & BOTTOM))
-			{
-				x = p0.x + (p1.x - p0.x) * (-p0.y) / (p1.y - p0.y);
-				y = 0;
-			}
-			else if (bool(outcodeOut & RIGHT))
-			{
-				y = p0.y + (p1.y - p0.y) * (1900 - p0.x) / (p1.x - p0.x);
-				x = 1900;
-			}
-			else if (bool(outcodeOut & LEFT))
-			{
-				y = p0.y + (p1.y - p0.y) * (-p0.x) / (p1.x - p0.x);
-				x = 0;
-			}
-
-			if (outcodeOut == outcode0)
-			{
-				p0.x = x;
-				p0.y = y;
-				outcode0 = ComputeOutCode(p0);
-			}
-			else
-			{
-				p1.x = x;
-				p1.y = y;
-				outcode1 = ComputeOutCode(p1);
-			}
-		}
-	}
-
-	return accept;
-}
-
-bool IsBboxInsideViewSpace(in BoundingBox bbox)
-{
-	vec2 p1 = vec2(bbox.minmax.x, bbox.minmax.w);
-	vec2 p2 = vec2(bbox.minmax.z, bbox.minmax.y);
-	return IsLineInsideViewSpace(bbox.minmax.xy, bbox.minmax.zw) || IsLineInsideViewSpace(p1, p2);
 }
 
 uint pathIndex;
@@ -267,9 +192,6 @@ Tile GetTileFromRelativePos(int x, int y)
 	return tiles[paths[pathIndex].startTileIndex + GetTileIndexFromRelativePos(x, y)];
 }
 
-const uint MAX_UINT = 4294967295;
-const float MAX_FLOAT = 3.40282347e+38F;
-
 void Span(int x, int y, uint width, uint quadIndex, uint color)
 {
 	uint base = quadIndex * 4;
@@ -305,10 +227,10 @@ void Coarse(in Path path)
 			int width = nextTileX - tileX - 1;
 
 			// If the winding is nonzero, span the whole tile
-			if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= ceil(float(1000.0) / TILE_SIZE)
+			if (tileX + width + 1 >= 0 && tileY >= 0 && tileY <= ceil(float(screenHeight) / TILE_SIZE)
 				&& GetTileFromRelativePos(tileX - m_TileStartX, tileY - m_TileStartY).winding != 0)
 			{
-				Span((tileX + 1) * TILE_SIZE, tileY * TILE_SIZE, width * TILE_SIZE, quadIndex++, paths[pathIndex].color);
+				Span((tileX + 1) * int(TILE_SIZE), tileY * int(TILE_SIZE), width * int(TILE_SIZE), quadIndex++, paths[pathIndex].color);
 			}
 		}
 	}
@@ -320,7 +242,7 @@ void main()
 	if (pathIndex < paths.length())
 	{
 		Path path = paths[pathIndex];
-		if (!IsBboxInsideViewSpace(path.bbox))
+		if (!path.isBboxVisible)
 		{
 			return;
 		}

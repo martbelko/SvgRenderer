@@ -170,6 +170,7 @@ namespace SvgRenderer {
 		m_FillShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Fill.comp");
 		m_CalcQuadsShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CalcQuads.comp");
 		m_PrefixSumShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PrefixSum.comp");
+		m_CoarseShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Coarse.comp");
 	}
 
 	void GPUPipeline::Shutdown()
@@ -365,30 +366,43 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Prefix sum: {0} ms", timer.ElapsedMillis());
+		}
+
+		// 11.step: Coarse
+		{
+			Timer timer;
+
+			uint32_t ySize = glm::ceil(Globals::PathsCount / static_cast<float>(maxWgCountX));
+			uint32_t xSize = ySize == 1 ? Globals::PathsCount : maxWgCountX;
+
+			m_CoarseShader->Bind();
+			m_CoarseShader->Dispatch(xSize, ySize, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+			SR_TRACE("Coarse: {0} ms", timer.ElapsedMillis());
 
 			readData();
 		}
 
-		// 4.5: Coarse
-		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.paths.size());
-			std::iota(indices.begin(), indices.end(), 0);
-
-			Timer timerCoarse;
-			ForEach(indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
-				{
-					const PathRender& path = Globals::AllPaths.paths[pathIndex];
-					if (!path.isBboxVisible)
-					{
-						return;
-					}
-
-					Rasterizer rast(pathIndex);
-					rast.Coarse(m_TileBuilder);
-				});
-			SR_TRACE("Coarse: {0}", timerCoarse.ElapsedMillis());
-		}
+		//{
+		//	std::vector<uint32_t> indices;
+		//	indices.resize(Globals::AllPaths.paths.size());
+		//	std::iota(indices.begin(), indices.end(), 0);
+		//
+		//	Timer timerCoarse;
+		//	ForEach(indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
+		//		{
+		//			const PathRender& path = Globals::AllPaths.paths[pathIndex];
+		//			if (!path.isBboxVisible)
+		//			{
+		//				return;
+		//			}
+		//
+		//			Rasterizer rast(pathIndex);
+		//			rast.Coarse(m_TileBuilder);
+		//		});
+		//	SR_TRACE("Coarse: {0}", timerCoarse.ElapsedMillis());
+		//}
 
 		// 4.6: Fine
 		{
