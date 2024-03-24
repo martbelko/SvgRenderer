@@ -125,28 +125,6 @@ layout(std430, binding = 7) buffer Helpers
 	uint renderIndicesCount;
 };
 
-vec2 GetPreviousPoint(uint pathIndex, uint cmdIndex)
-{
-	Path path = paths[pathIndex];
-	if (cmdIndex == path.startCmdIndex)
-	{
-		return vec2(0, 0);
-	}
-
-	Command cmd = commands[cmdIndex - 1];
-	uint pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
-	switch (pathType)
-	{
-	case MOVE_TO:
-	case LINE_TO:
-		return cmd.transformedPoints[0];
-	case QUAD_TO:
-		return cmd.transformedPoints[1];
-	case CUBIC_TO:
-		return cmd.transformedPoints[2];
-	}
-}
-
 uint pathIndex;
 int m_TileStartX;
 int m_TileStartY;

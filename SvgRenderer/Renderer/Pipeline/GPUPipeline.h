@@ -28,7 +28,7 @@ namespace SvgRenderer {
 		}
 	private:
 		TileBuilder m_TileBuilder;
-		uint32_t m_Vbo = 0, m_Ibo = 0, m_Vao = 0, m_AlphaTexture = 0;
+		uint32_t m_Ibo = 0, m_Vao = 0, m_AlphaTexture = 0;
 		uint32_t m_RenderIndicesCount = 0;
 
 		Ref<Shader> m_FinalShader;
@@ -43,6 +43,7 @@ namespace SvgRenderer {
 		Ref<Shader> m_CalcQuadsShader;
 		Ref<Shader> m_PrefixSumShader;
 		Ref<Shader> m_CoarseShader;
+		Ref<Shader> m_FineShader;
 
 		uint32_t m_ParamsBuf, m_PathsBuf, m_CmdsBuf, m_SimpleCmdsBuf, m_TilesBuf, m_VerticesBuf, m_AtlasBuf, m_AtomicsBuf;
 
