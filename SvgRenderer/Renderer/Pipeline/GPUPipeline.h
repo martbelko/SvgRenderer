@@ -24,7 +24,7 @@ namespace SvgRenderer {
 		template <class FwdIt, class Fn>
 		void ForEach(FwdIt first, FwdIt last, Fn func) noexcept
 		{
-			std::for_each(std::execution::seq, first, last, func);
+			std::for_each(std::execution::par, first, last, func);
 		}
 	private:
 		TileBuilder m_TileBuilder;
@@ -40,6 +40,7 @@ namespace SvgRenderer {
 		Ref<Shader> m_CalcBboxShader;
 		Ref<Shader> m_PreFillShader;
 		Ref<Shader> m_FillShader;
+		Ref<Shader> m_CalcQuadsShader;
 
 		uint32_t m_ParamsBuf, m_PathsBuf, m_CmdsBuf, m_SimpleCmdsBuf, m_TilesBuf, m_VerticesBuf, m_AtlasBuf, m_AtomicsBuf;
 

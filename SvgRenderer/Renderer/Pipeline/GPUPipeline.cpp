@@ -168,6 +168,7 @@ namespace SvgRenderer {
 		m_CalcBboxShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CalcBbox.comp");
 		m_PreFillShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "PreFill.comp");
 		m_FillShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Fill.comp");
+		m_CalcQuadsShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "CalcQuads.comp");
 	}
 
 	void GPUPipeline::Shutdown()
@@ -335,32 +336,22 @@ namespace SvgRenderer {
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			SR_TRACE("Fill: {0} ms", timer.ElapsedMillis());
-
-			readData();
 		}
 
-		// 4.3: Calculate correct count and indices for vertices of each path
+		// 8.step: Calculate correct count and indices for vertices of each path
 		{
-			std::vector<uint32_t> indices;
-			indices.resize(Globals::AllPaths.paths.size());
-			std::iota(indices.begin(), indices.end(), 0);
+			Timer timer;
 
-			Timer timer43;
-			ForEach(indices.cbegin(), indices.cend(), [this](uint32_t pathIndex)
-				{
-					PathRender& path = Globals::AllPaths.paths[pathIndex];
-					if (!path.isBboxVisible)
-					{
-						return;
-					}
+			uint32_t ySize = glm::ceil(Globals::PathsCount / static_cast<float>(maxWgCountX));
+			uint32_t xSize = ySize == 1 ? Globals::PathsCount : maxWgCountX;
 
-					Rasterizer rast(pathIndex);
+			m_CalcQuadsShader->Bind();
+			m_CalcQuadsShader->Dispatch(xSize, ySize, 1);
+			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-					auto [coarseQuadCount, fineQuadCount] = rast.CalculateNumberOfQuads();
-					path.startSpanQuadIndex = coarseQuadCount;
-					path.startTileQuadIndex = fineQuadCount;
-				});
-			SR_TRACE("Step 4.3: {0}", timer43.ElapsedMillis());
+			SR_TRACE("Calculating quads: {0} ms", timer.ElapsedMillis());
+
+			readData();
 		}
 
 		// 4.4: Calculate correct tile indices for each path
