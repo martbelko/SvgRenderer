@@ -45,7 +45,7 @@ namespace SvgRenderer {
 		Ref<Shader> m_CoarseShader;
 		Ref<Shader> m_FineShader;
 
-		uint32_t m_ParamsBuf, m_PathsBuf, m_CmdsBuf, m_SimpleCmdsBuf, m_TilesBuf, m_VerticesBuf, m_AtlasBuf, m_AtomicsBuf;
+		uint32_t m_ParamsBuf, m_PathsBuf, m_CmdsBuf, m_SimpleCmdsBuf, m_TilesBuf, m_VerticesBuf, m_AtlasBuf, m_HelpersBuf;
 
 		ParamsBuf m_Params;
 	};

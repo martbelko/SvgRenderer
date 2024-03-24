@@ -137,7 +137,7 @@ namespace SvgRenderer {
 		glCreateBuffers(1, &m_SimpleCmdsBuf);
 		glCreateBuffers(1, &m_TilesBuf);
 		glCreateBuffers(1, &m_AtlasBuf);
-		glCreateBuffers(1, &m_AtomicsBuf);
+		glCreateBuffers(1, &m_HelpersBuf);
 
 		constexpr GLenum bufferFlags = GL_CLIENT_STORAGE_BIT | GL_MAP_READ_BIT | GL_DYNAMIC_STORAGE_BIT;
 		glNamedBufferStorage(m_ParamsBuf, sizeof(ParamsBuf), nullptr, GL_DYNAMIC_STORAGE_BIT);
@@ -147,7 +147,7 @@ namespace SvgRenderer {
 		glNamedBufferStorage(m_TilesBuf, Globals::Tiles.tiles.size() * sizeof(Tile), Globals::Tiles.tiles.data(), bufferFlags);
 		glNamedBufferStorage(m_VerticesBuf, m_TileBuilder.vertices.size() * sizeof(Vertex), m_TileBuilder.vertices.data(), bufferFlags);
 		glNamedBufferStorage(m_AtlasBuf, m_TileBuilder.atlas.size() * sizeof(float), m_TileBuilder.atlas.data(), bufferFlags);
-		glNamedBufferStorage(m_AtomicsBuf, 3 * sizeof(uint32_t), nullptr, bufferFlags);
+		glNamedBufferStorage(m_HelpersBuf, 3 * sizeof(uint32_t), nullptr, bufferFlags);
 
 		glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_ParamsBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_PathsBuf);
@@ -156,7 +156,7 @@ namespace SvgRenderer {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, m_TilesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 5, m_VerticesBuf);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, m_AtlasBuf);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, m_AtomicsBuf);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, m_HelpersBuf);
 
 		m_FinalShader = Shader::Create(Filesystem::AssetsPath() / "shaders" / "Main.vert", Filesystem::AssetsPath() / "shaders" / "Main.frag");
 		m_ResetShader = Shader::CreateCompute(Filesystem::AssetsPath() / "shaders" / "Reset.comp");
@@ -186,7 +186,7 @@ namespace SvgRenderer {
 		glDeleteBuffers(1, &m_SimpleCmdsBuf);
 		glDeleteBuffers(1, &m_TilesBuf);
 		glDeleteBuffers(1, &m_AtlasBuf);
-		glDeleteBuffers(1, &m_AtomicsBuf);
+		glDeleteBuffers(1, &m_HelpersBuf);
 	}
 
 	void GPUPipeline::Render()
