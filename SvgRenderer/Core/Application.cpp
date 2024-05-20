@@ -451,7 +451,7 @@ namespace SvgRenderer {
 		}
 	}
 
-	void Application::Init()
+	void Application::Init(const std::filesystem::path& svgFilepath)
 	{
 		m_Window = Window::Create({
 			.width = Globals::WindowWidth,
@@ -478,7 +478,7 @@ namespace SvgRenderer {
 		Renderer::Init(Globals::WindowWidth, Globals::WindowHeight);
 
 		Timer timerParse;
-		SvgNode* root = SvgParser::Parse("C:/Users/user/Desktop/svgs/paris.svg");
+		SvgNode* root = SvgParser::Parse(svgFilepath);
 		SR_TRACE("Parsing: {0} ms", timerParse.ElapsedMillis());
 
 		// This actually fills information about colors and other attributes from the SVG root node
@@ -486,7 +486,6 @@ namespace SvgRenderer {
 		delete root;
 
 		m_Pipeline = new GPUPipeline();
-		SR_INFO("Running in mode\n");
 		m_Pipeline->Init();
 	}
 

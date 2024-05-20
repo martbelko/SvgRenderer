@@ -83,6 +83,15 @@ namespace SvgRenderer {
 
 	void CPUPipeline::Init()
 	{
+		if (m_CpuMode == CPUMode::Seq)
+		{
+			SR_INFO("Running in CPU sequential mode\n");
+		}
+		else
+		{
+			SR_INFO("Running in CPU parallel mode\n");
+		}
+
 		Globals::AllPaths.simpleCommands.resize(SIMPLE_COMMANDS_COUNT);
 		Globals::Tiles.tiles.resize(TILES_COUNT);
 		m_TileBuilder.vertices.resize(VERTICES_COUNT);

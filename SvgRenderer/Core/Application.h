@@ -16,7 +16,7 @@ namespace SvgRenderer {
 	class Application
 	{
 	public:
-		void Init();
+		void Init(const std::filesystem::path& svgFilepath);
 		void Shutdown();
 
 		void Run();

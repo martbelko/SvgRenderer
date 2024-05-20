@@ -22,6 +22,8 @@ namespace SvgRenderer {
 
 	void GPUPipeline::Init()
 	{
+		SR_INFO("Running in GPU mode\n");
+
 		Globals::PathsCount = static_cast<uint32_t>(Globals::AllPaths.paths.size());
 		Globals::CommandsCount = static_cast<uint32_t>(Globals::AllPaths.commands.size());
 
