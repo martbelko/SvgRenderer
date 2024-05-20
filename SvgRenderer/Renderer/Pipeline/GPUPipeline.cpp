@@ -10,67 +10,6 @@
 
 namespace SvgRenderer {
 
-	static glm::vec2 ApplyTransform(const glm::mat4& transform, const glm::vec2& point)
-	{
-		return Globals::GlobalTransform * (transform * glm::vec4(point, 1.0f, 1.0f));
-	}
-
-	static void TransformCurve(PathRenderCmd& cmd)
-	{
-		uint32_t pathIndex = GET_CMD_PATH_INDEX(cmd.pathIndexCmdType);
-		cmd.transformedPoints[0] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[0]);
-		cmd.transformedPoints[1] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[1]);
-		cmd.transformedPoints[2] = ApplyTransform(Globals::AllPaths.paths[pathIndex].transform, cmd.points[2]);
-	}
-
-	static glm::vec2 GetPreviousPoint(const PathRender& path, uint32_t index)
-	{
-		if (index == path.startCmdIndex)
-		{
-			return glm::vec2(0, 0);
-		}
-
-		PathRenderCmd& prevCmd = Globals::AllPaths.commands[index - 1];
-		uint32_t pathType = GET_CMD_TYPE(prevCmd.pathIndexCmdType);
-		switch (pathType)
-		{
-		case MOVE_TO:
-		case LINE_TO:
-			return prevCmd.transformedPoints[0];
-		case QUAD_TO:
-			return prevCmd.transformedPoints[1];
-		case CUBIC_TO:
-			return prevCmd.transformedPoints[2];
-		}
-	}
-
-	static glm::vec2 GetPreviousFlattenedPoint(uint32_t pathIndex, uint32_t cmdIndex)
-	{
-		const PathRender& path = Globals::AllPaths.paths[pathIndex];
-		if (cmdIndex == path.startCmdIndex)
-		{
-			return glm::vec2(0, 0);
-		}
-
-		const PathRenderCmd& cmd = Globals::AllPaths.commands[cmdIndex - 1];
-		if (cmd.startIndexSimpleCommands != cmd.endIndexSimpleCommands)
-		{
-			return Globals::AllPaths.simpleCommands[cmd.endIndexSimpleCommands - 1].point;
-		}
-
-		uint32_t pathType = GET_CMD_TYPE(cmd.pathIndexCmdType);
-		switch (pathType)
-		{
-		case MOVE_TO:
-		{
-			return cmd.transformedPoints[0];
-		}
-		}
-
-		SR_ASSERT(false, "Invalid path type");
-		return glm::vec2(0, 0);
-	}
-
 	// This remains fixed for the whole run of the program, may change in the future
 	// For now, it is designed to store all the data from paris.svg,
 	// but I am sure there is a way to resize this according to the size
@@ -130,6 +69,10 @@ namespace SvgRenderer {
 		glEnableVertexArrayAttrib(m_Vao, 2);
 		glVertexArrayAttribFormat(m_Vao, 2, 4, GL_UNSIGNED_BYTE, GL_TRUE, 16);
 		glVertexArrayAttribBinding(m_Vao, 2, 0);
+
+		glCreateBuffers(1, &m_IndirectBuffer);
+		glNamedBufferStorage(m_IndirectBuffer, 5 * sizeof(uint32_t), nullptr, GL_DYNAMIC_STORAGE_BIT);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, m_IndirectBuffer);
 
 		glCreateBuffers(1, &m_ParamsBuf);
 		glCreateBuffers(1, &m_PathsBuf);
@@ -225,9 +168,6 @@ namespace SvgRenderer {
 		};
 
 		// 1.step: Reset all the data
-		GLubyte val = 0;
-		//glClearNamedBufferData(m_TilesBuf, GL_R8UI, GL_RED_INTEGER, GL_UNSIGNED_BYTE, &val);
-
 		{
 			Timer timer;
 
@@ -424,6 +364,13 @@ namespace SvgRenderer {
 		//glTextureSubImage2D(m_AlphaTexture, 0, 0, 0, ATLAS_SIZE, ATLAS_SIZE, GL_RED, GL_FLOAT, m_TileBuilder.atlas.data());
 
 		SR_INFO("Total execution time: {0} ms", globalTimer.ElapsedMillis());
+
+		static uint32_t totalTime = 0;
+		static uint32_t iters = 0;
+		totalTime += globalTimer.ElapsedMillis();
+		iters++;
+		SR_INFO("Average time: {0} ms", totalTime / static_cast<float>(iters));
+
 	}
 
 	void GPUPipeline::Final()
@@ -432,6 +379,7 @@ namespace SvgRenderer {
 		glEnable(GL_BLEND);
 
 		glBindVertexArray(m_Vao);
+		glBindBuffer(GL_DRAW_INDIRECT_BUFFER, m_IndirectBuffer);
 		m_FinalShader->Bind();
 
 		glUniform2ui(0, Globals::WindowWidth, Globals::WindowHeight);
@@ -440,7 +388,7 @@ namespace SvgRenderer {
 
 		glClearColor(1.0, 1.0, 1.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT);
-		glDrawElements(GL_TRIANGLES, m_TileBuilder.indices.size(), GL_UNSIGNED_INT, nullptr);
+		glDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, nullptr);
 	}
 
 }

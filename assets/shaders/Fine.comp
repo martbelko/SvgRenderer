@@ -281,7 +281,6 @@ void Fine(in Path path)
 			heights[j] = 0.0;
 		}
 
-		// Next active tile in the same y-coord, same as the previous one, could be optimized and only done once
 		if (tile.nextTileIndex == MAX_UINT)
 		{
 			Tile tile = tiles[tile.nextTileIndex];

@@ -145,14 +145,12 @@ namespace SvgRenderer {
 
 		// 0.step: Reset all the data
 		{
-			std::vector<uint32_t> tileIndices, vertexIndices, atlasIndices, pathIndices;
+			std::vector<uint32_t> tileIndices, atlasIndices, pathIndices;
 			tileIndices.resize(TILES_COUNT);
-			vertexIndices.resize(VERTICES_COUNT);
 			atlasIndices.resize(ATLAS_SIZE * ATLAS_SIZE - 1);
 			pathIndices.resize(Globals::AllPaths.paths.size());
 
 			std::iota(tileIndices.begin(), tileIndices.end(), 0);
-			std::iota(vertexIndices.begin(), vertexIndices.end(), 0);
 			std::iota(atlasIndices.begin(), atlasIndices.end(), 1);
 			std::iota(pathIndices.begin(), pathIndices.end(), 0);
 
@@ -168,11 +166,6 @@ namespace SvgRenderer {
 					Globals::Tiles.tiles[tileIndex].increments[i].area = 0;
 					Globals::Tiles.tiles[tileIndex].increments[i].height = 0;
 				}
-			});
-
-			ForEach(vertexIndices.begin(), vertexIndices.end(), [this](uint32_t vertexIndex)
-			{
-				m_TileBuilder.vertices[vertexIndex] = Vertex{ .pos = { -1, -1 }, .uv = { 0, 0 }, .color = { 0, 0, 0, 0 } };
 			});
 
 			ForEach(atlasIndices.begin(), atlasIndices.end(), [this](uint32_t pixelIndex)
@@ -519,6 +512,12 @@ namespace SvgRenderer {
 		glTextureSubImage2D(m_AlphaTexture, 0, 0, 0, ATLAS_SIZE, ATLAS_SIZE, GL_RED, GL_FLOAT, m_TileBuilder.atlas.data());
 
 		SR_INFO("Total execution time: {0} ms", globalTimer.ElapsedMillis());
+
+		static uint32_t totalTime = 0;
+		static uint32_t iters = 0;
+		totalTime += globalTimer.ElapsedMillis();
+		iters++;
+		SR_INFO("Average time: {0} ms", totalTime / static_cast<float>(iters));
 	}
 
 	void CPUPipeline::Final()

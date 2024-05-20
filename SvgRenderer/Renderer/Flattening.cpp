@@ -758,7 +758,7 @@ namespace SvgRenderer::Flattening {
 			glm::vec2 lastFlattened = last;
 			uint32_t simpleCmdIndex = cmd.startIndexSimpleCommands;
 
-			const float dt = glm::sqrt(((4.0f * tolerance) / glm::length(last - 2.0f * p1 + p2)));
+			const float dt = glm::sqrt((4.0f * tolerance) / glm::length(last - 2.0f * p1 + p2));
 			float t = 0.0f;
 			while (t < 1.0f)
 			{

@@ -238,7 +238,7 @@ void LineToSimpleCmd(vec2 last, vec2 point, uint pathIndex)
 		else
 		{
 			float nextX = point.x > last.x ? x + 1 : x;
-			colt1 = min((dtdx * (nextX - last.x)), 1.0f);
+			colt1 = min((dtdx * (nextX - last.x)), 1.0);
 		}
 
 		float xStep = abs(dtdx);
@@ -248,11 +248,11 @@ void LineToSimpleCmd(vec2 last, vec2 point, uint pathIndex)
 		{
 			float t0 = max(rowt0, colt0);
 			float t1 = min(rowt1, colt1);
-			vec2 p0 = (1.0f - t0) * last + t0 * point;
-			vec2 p1 = (1.0f - t1) * last + t1 * point;
+			vec2 p0 = (1.0 - t0) * last + t0 * point;
+			vec2 p1 = (1.0 - t1) * last + t1 * point;
 			float height = p1.y - p0.y;
 			float right = x + 1;
-			float area = 0.5f * height * ((right - p0.x) + (right - p1.x));
+			float area = 0.5 * height * ((right - p0.x) + (right - p1.x));
 
 			int relativeX = abs(x % int(TILE_SIZE));
 			int relativeY = abs(y % int(TILE_SIZE));

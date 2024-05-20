@@ -30,6 +30,7 @@ namespace SvgRenderer {
 		TileBuilder m_TileBuilder;
 		uint32_t m_Ibo = 0, m_Vao = 0, m_AlphaTexture = 0;
 		uint32_t m_RenderIndicesCount = 0;
+		uint32_t m_IndirectBuffer = 0;
 
 		Ref<Shader> m_FinalShader;
 		Ref<Shader> m_ResetShader;

@@ -125,6 +125,15 @@ layout(std430, binding = 7) buffer Helpers
 	uint renderIndicesCount;
 };
 
+layout(std430, binding = 8) buffer IndirectBuf
+{
+	uint vertCount;
+	uint _instanceCount;
+	uint _firstIndex;
+	int _baseVertex;
+	uint _reservedMustBeZero;
+};
+
 // TODO: Optimize
 void main()
 {
@@ -151,4 +160,9 @@ void main()
 	}
 
 	renderIndicesCount = accumCount * 6;
+	vertCount = renderIndicesCount;
+	_instanceCount = 1;
+	_firstIndex = 0;
+	_baseVertex = 0;
+	_reservedMustBeZero = 0;
 }
