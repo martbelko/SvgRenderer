@@ -59,6 +59,7 @@ namespace SvgRenderer {
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 
 #ifdef _DEBUG
 		glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, true);
@@ -96,6 +97,8 @@ namespace SvgRenderer {
 		SR_ASSERT(desc.callbacks.onViewportSizeChanged != nullptr, "Callback function cannot be nullptr");
 
 		glfwSetWindowUserPointer(window, this);
+
+		glfwSetWindowAttrib(window, GLFW_RESIZABLE, GL_FALSE);
 
 		glfwSetWindowCloseCallback(window, Window::OnWindowShouldClose);
 		glfwSetKeyCallback(window, Window::OnKeyChanged);

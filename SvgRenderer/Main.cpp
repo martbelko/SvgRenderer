@@ -29,7 +29,7 @@ int main(int argc, char** argv)
 	SR_INFO("Initialized Log");
 
 	std::string choice = "";
-	SR_INFO("Select image to render:\n1) Tiger\n2) Paris\n3) World\n");
+	std::cout << "Select image to render:\n1) Tiger\n2) Paris\n3) World\n";
 
 	while (true)
 	{
